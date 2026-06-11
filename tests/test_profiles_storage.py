@@ -29,7 +29,7 @@ def test_mask_short_key(profiles_module):
 
 
 def test_mask_typical_key(profiles_module):
-    assert profiles_module.mask_api_key("sk-test000000000000000000000000000000") == "sk-••••b4e3"
+    assert profiles_module.mask_api_key("sk-test000000000000000000000000000000") == "sk-••••0000"
 
 
 def test_mask_very_short_key(profiles_module):
