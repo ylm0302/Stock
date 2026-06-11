@@ -1,0 +1,215 @@
+/* ═══ TradingAgents Dashboard — Custom Styles ═══ */
+
+/* ── Global ────────────────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: #334155;
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #475569;
+}
+
+/* ── Animations ────────────────────────────────────────────────────── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-pulse {
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+/* ── Markdown / Report content ─────────────────────────────────────── */
+.prose {
+  color: #e2e8f0;
+  line-height: 1.75;
+}
+
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  color: #f1f5f9;
+  font-weight: 700;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.prose h1 { font-size: 1.5rem; border-bottom: 1px solid #334155; padding-bottom: 0.3em; }
+.prose h2 { font-size: 1.25rem; }
+.prose h3 { font-size: 1.1rem; color: #38bdf8; }
+.prose h4 { font-size: 1rem; }
+
+.prose p {
+  margin-bottom: 0.75em;
+}
+
+.prose ul, .prose ol {
+  padding-left: 1.5em;
+  margin-bottom: 0.75em;
+}
+
+.prose li {
+  margin-bottom: 0.25em;
+}
+
+.prose strong {
+  color: #f8fafc;
+  font-weight: 700;
+}
+
+.prose em {
+  color: #94a3b8;
+}
+
+.prose code {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.prose pre {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  margin-bottom: 1em;
+}
+
+.prose pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.85em;
+}
+
+.prose blockquote {
+  border-left: 3px solid #38bdf8;
+  padding-left: 1em;
+  margin-left: 0;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 1em;
+  font-size: 0.9em;
+}
+
+.prose th {
+  background: #1e293b;
+  color: #94a3b8;
+  font-weight: 600;
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 2px solid #334155;
+}
+
+.prose td {
+  padding: 6px 12px;
+  border-bottom: 1px solid #1e293b;
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid #334155;
+  margin: 1.5em 0;
+}
+
+.prose a {
+  color: #38bdf8;
+  text-decoration: underline;
+}
+
+.prose a:hover {
+  color: #7dd3fc;
+}
+
+/* ── Transitions ───────────────────────────────────────────────────── */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
+
+/* ── Responsive ────────────────────────────────────────────────────── */
+@media (max-width: 1280px) {
+  aside.w-80 {
+    width: 240px !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .flex.flex-1.overflow-hidden {
+    flex-direction: column;
+  }
+  aside.w-80 {
+    width: 100% !important;
+    max-height: 300px;
+  }
+}
+
+/* ── Chart container ───────────────────────────────────────────────── */
+#chart-container {
+  min-height: 200px;
+}
+
+/* ── Date input color fix ──────────────────────────────────────────── */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+}
+
+/* ── Checkbox styling ──────────────────────────────────────────────── */
+input[type="checkbox"] {
+  accent-color: #38bdf8;
+}
+
+/* ── Selection color ───────────────────────────────────────────────── */
+::selection {
+  background: rgba(56, 189, 248, 0.3);
+  color: #fff;
+}
+/* ── Profile save button pulse ── */
+@keyframes pulse-accent {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.6); }
+  50% { box-shadow: 0 0 0 6px rgba(56, 189, 248, 0); }
+}
+.animate-pulse-accent {
+  animation: pulse-accent 1.6s ease-in-out infinite;
+}

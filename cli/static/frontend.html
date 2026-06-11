@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TradingAgents · Multi-Agent Trading Dashboard</title>
+
+  <!-- Tailwind CSS (local) -->
+  <script src="/libs/tailwindcss.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface: { DEFAULT: '#0f172a', light: '#1e293b', lighter: '#334155' },
+            accent: { DEFAULT: '#38bdf8', dim: '#0ea5e9' },
+            success: '#22c55e',
+            warning: '#eab308',
+            danger: '#ef4444',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Vue 3 (local) -->
+  <script src="/libs/vue.global.prod.js"></script>
+
+  <!-- ECharts (local) -->
+  <script src="/libs/echarts.min.js"></script>
+
+  <!-- Marked (local) -->
+  <script src="/libs/marked.min.js"></script>
+
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body class="bg-[#0f172a] text-slate-200 min-h-screen font-sans antialiased">
+
+<div id="app" class="flex flex-col h-screen">
+  <!-- ═══ HEADER ═══ -->
+  <header class="flex items-center justify-between px-6 py-3 bg-surface-light border-b border-slate-700 shrink-0">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">🔬</span>
+      <div>
+        <h1 class="text-lg font-bold text-white tracking-tight">TradingAgents</h1>
+        <p class="text-xs text-slate-400">Multi-Agent LLM Trading Dashboard</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-4 text-xs text-slate-400">
+      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full" :class="serverOnline ? 'bg-green-500' : 'bg-red-500'"></span> {{ serverOnline ? '已连接' : '离线' }}</span>
+      <span>结果目录: {{ statusInfo.results_dir || '—' }}</span>
+    </div>
+  </header>
+
+  <!-- ═══ MAIN CONTENT ═══ -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- ── LEFT PANEL ── -->
+    <aside class="w-80 shrink-0 bg-surface-light border-r border-slate-700 flex flex-col overflow-hidden">
+      <!-- Config Form -->
+      <div class="p-4 border-b border-slate-700 overflow-y-auto">
+        <!-- ═══ Profile Selector ═══ -->
+        <div class="mb-3 p-3 rounded-lg border border-accent/40 bg-surface/50">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-semibold text-accent">📁 配置方案</span>
+            <span class="text-[10px] text-slate-500">已保存 {{ profiles.length }}</span>
+          </div>
+
+          <div v-if="profiles.length === 0" class="text-center py-2">
+            <button @click="saveAsProfile"
+              class="text-xs text-accent hover:text-white transition">
+              ➕ 保存当前为新方案
+            </button>
+          </div>
+
+          <div v-else>
+            <div class="flex items-center gap-1 mb-2">
+              <select v-model="activeProfileName" @change="onProfileSwitch"
+                class="flex-1 px-2 py-1.5 bg-surface border border-slate-600 rounded text-xs text-white focus:border-accent focus:outline-none">
+                <option v-for="p in profiles" :key="p.name" :value="p.name">
+                  {{ profileEmoji(p.name) }} {{ p.name }}
+                </option>
+              </select>
+              <button @click="saveProfile" title="保存到当前方案"
+                class="px-2 py-1.5 rounded text-xs font-bold transition"
+                :class="profileDirty ? 'bg-accent text-slate-900 animate-pulse-accent' : 'bg-surface-lighter text-slate-400 hover:text-white'">
+                💾
+              </button>
+              <button @click="saveAsProfile" title="另存为新方案"
+                class="px-2 py-1.5 rounded text-xs bg-surface-lighter text-slate-400 hover:text-white transition">
+                ➕
+              </button>
+              <button @click="deleteProfile" title="删除当前方案"
+                class="px-2 py-1.5 rounded text-xs bg-surface-lighter text-red-400 hover:text-red-300 transition">
+                🗑
+              </button>
+            </div>
+            <div class="text-[10px] text-slate-500 flex gap-2 flex-wrap">
+              <span>🔌 {{ (activeProfileConfig.llm_provider || '—') }}</span>
+              <span>🔑 {{ maskedApiKey }}</span>
+              <span>🧠 {{ activeProfileConfig.deep_thinker || '—' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">📋 分析配置</h2>
+
+        <div class="space-y-3">
+          <!-- Ticker -->
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">标的代码</label>
+            <input v-model="form.ticker" type="text" placeholder="NVDA / AAPL / 110022 / BTC-USD"
+              class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none transition" />
+          </div>
+
+          <!-- Date -->
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">分析日期</label>
+            <input v-model="form.analysis_date" type="date"
+              class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none transition" />
+          </div>
+
+          <!-- Asset Type -->
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">资产类型</label>
+            <select v-model="form.asset_type"
+              class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none transition">
+              <option value="stock">Stock 股票</option>
+              <option value="crypto">Crypto 加密货币</option>
+              <option value="fund">Fund 基金</option>
+            </select>
+          </div>
+
+          <!-- LLM Provider -->
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">LLM 提供商</label>
+            <select v-model="form.llm_provider" @change="onProviderChange(); checkProfileDirty()"
+              class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none transition">
+              <option v-for="p in providers" :value="p.value">{{ p.label }}</option>
+            </select>
+          </div>
+
+          <!-- Backend URL -->
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">API 接入地址</label>
+            <input v-model="form.backend_url" @input="checkProfileDirty" type="text" placeholder="https://..."
+              class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none transition" />
+          </div>
+
+          <!-- API Key -->
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">API Key</label>
+            <div class="relative">
+              <input v-model="form.api_key" @input="checkProfileDirty" :type="showApiKey ? 'text' : 'password'" placeholder="sk-..."
+                class="w-full px-3 py-2 pr-9 bg-surface border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none transition" />
+              <button @click="showApiKey = !showApiKey" type="button"
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-sm"
+                tabindex="-1">
+                {{ showApiKey ? '🙈' : '👁' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Shallow Model -->
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">快速思考模型</label>
+            <input v-model="form.shallow_thinker" @input="checkProfileDirty" type="text"
+              class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none transition" />
+          </div>
+
+          <!-- Deep Model -->
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">深度思考模型</label>
+            <input v-model="form.deep_thinker" @input="checkProfileDirty" type="text"
+              class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none transition" />
+          </div>
+
+          <!-- Language -->
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">输出语言</label>
+            <select v-model="form.output_language" @change="checkProfileDirty"
+              class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none transition">
+              <option value="Chinese">中文 Chinese</option>
+              <option value="English">English</option>
+            </select>
+          </div>
+
+          <!-- Research Depth -->
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">研究深度</label>
+            <select v-model.number="form.research_depth" @change="checkProfileDirty"
+              class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none transition">
+              <option :value="1">Shallow (快速)</option>
+              <option :value="3">Medium (标准)</option>
+              <option :value="5">Deep (深度)</option>
+            </select>
+          </div>
+
+          <!-- Checkpoint -->
+          <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+            <input v-model="form.checkpoint" @change="checkProfileDirty" type="checkbox" class="rounded bg-surface border-slate-600" />
+            启用断点续传
+          </label>
+        </div>
+
+        <!-- Run Button -->
+        <button @click="startAnalysis" :disabled="running"
+          class="w-full mt-4 py-3 rounded-xl font-bold text-sm transition-all duration-200"
+          :class="running ? 'bg-slate-600 text-slate-400 cursor-not-allowed' : 'bg-accent hover:bg-accent-dim text-slate-900 shadow-lg shadow-accent/20'">
+          <span v-if="!running">▶ 开始分析</span>
+          <span v-else class="flex items-center justify-center gap-2">
+            <span class="animate-spin inline-block w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full"></span>
+            分析中...
+          </span>
+        </button>
+      </div>
+
+      <!-- Agent Status -->
+      <div class="flex-1 overflow-y-auto p-4">
+        <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">🤖 Agent 状态</h2>
+        <div v-if="agents.length === 0" class="text-xs text-slate-500 text-center py-8">
+          等待分析开始...
+        </div>
+        <div class="space-y-1.5">
+          <div v-for="agent in agents" :key="agent.name"
+            class="flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-all duration-300"
+            :class="agentStatusBg(agent.status)">
+            <span class="w-2 h-2 rounded-full shrink-0" :class="agentStatusDot(agent.status)"></span>
+            <span class="flex-1 truncate">{{ agent.name }}</span>
+            <span class="text-[10px] uppercase tracking-wider opacity-70">{{ statusLabel(agent.status) }}</span>
+          </div>
+        </div>
+
+        <!-- Progress bar -->
+        <div v-if="running && agents.length > 0" class="mt-4">
+          <div class="flex justify-between text-[10px] text-slate-500 mb-1">
+            <span>整体进度</span><span>{{ completedCount }}/{{ agents.length }}</span>
+          </div>
+          <div class="h-1.5 bg-surface rounded-full overflow-hidden">
+            <div class="h-full bg-accent rounded-full transition-all duration-500 ease-out"
+              :style="{ width: progressPercent + '%' }"></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── CENTER: REPORT ── -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+      <!-- Report Tabs -->
+      <div class="flex items-center gap-1 px-4 py-2 bg-surface-light border-b border-slate-700 shrink-0 overflow-x-auto">
+        <button v-for="tab in reportTabs" :key="tab.key" @click="activeTab = tab.key"
+          class="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200"
+          :class="activeTab === tab.key
+            ? 'bg-accent text-slate-900 shadow-sm'
+            : 'text-slate-400 hover:text-white hover:bg-surface-lighter'">
+          {{ tab.label }}
+          <span v-if="reportSections[tab.key]" class="ml-1 text-[10px] opacity-60">✓</span>
+        </button>
+      </div>
+
+      <!-- Report Content -->
+      <div class="flex-1 overflow-y-auto p-6">
+        <!-- Empty state -->
+        <div v-if="!reportSections[activeTab] && !running" class="flex flex-col items-center justify-center h-full text-slate-500">
+          <span class="text-5xl mb-4">📝</span>
+          <p class="text-sm">选择一个历史结果或开始新分析</p>
+          <p class="text-xs mt-1 text-slate-600">报告将在此处实时展示</p>
+        </div>
+
+        <!-- Loading state for active tab while running -->
+        <div v-if="running && !reportSections[activeTab]" class="flex items-center justify-center h-full">
+          <div class="text-center text-slate-500">
+            <span class="animate-spin inline-block w-6 h-6 border-2 border-accent border-t-transparent rounded-full mb-3"></span>
+            <p class="text-sm">等待 {{ currentTabLabel }} 报告...</p>
+          </div>
+        </div>
+
+        <!-- Report content rendered as Markdown -->
+        <div v-if="reportSections[activeTab]" class="prose prose-invert prose-sm max-w-none">
+          <div v-html="renderMarkdown(reportSections[activeTab])"></div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ── RIGHT PANEL ── -->
+    <aside class="w-80 shrink-0 bg-surface-light border-l border-slate-700 flex flex-col overflow-hidden">
+      <!-- Chart -->
+      <div class="p-3 border-b border-slate-700">
+        <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-2">📊 价格走势</h2>
+        <div v-if="chartLoading" class="flex items-center justify-center h-48 text-xs text-slate-500">
+          <span class="animate-spin inline-block w-4 h-4 border-2 border-accent border-t-transparent rounded-full mr-2"></span>
+          加载图表...
+        </div>
+        <div v-if="!chartData && !chartLoading" class="flex items-center justify-center h-48 text-xs text-slate-500">
+          分析完成后自动加载
+        </div>
+        <div id="chart-container" v-show="chartData" class="w-full" style="height:220px;"></div>
+      </div>
+
+      <!-- History -->
+      <div class="flex-1 overflow-y-auto p-3">
+        <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-2">📂 历史记录</h2>
+        <div v-if="history.length === 0" class="text-xs text-slate-500 text-center py-8">
+          暂无历史记录
+        </div>
+        <div class="space-y-1">
+          <div v-for="item in history" :key="item.ticker">
+            <div class="text-xs font-semibold text-white px-2 py-1">{{ item.ticker }}</div>
+            <button v-for="date in item.dates" :key="date" @click="loadReport(item.ticker, date)"
+              class="w-full text-left px-4 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-surface-lighter transition flex items-center gap-2">
+              <span class="text-[10px]">📄</span> {{ date }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ═══ BOTTOM: LOG STREAM ═══ -->
+  <footer class="shrink-0 bg-surface-light border-t border-slate-700">
+    <div class="flex items-center justify-between px-4 py-1.5 border-b border-slate-700/50">
+      <h2 class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">📜 实时日志</h2>
+      <button @click="clearLogs()" class="text-[10px] text-slate-500 hover:text-white transition">清除</button>
+    </div>
+    <div ref="logContainer" class="h-28 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed">
+      <div v-if="logs.length === 0" class="text-slate-600 px-2">等待事件...</div>
+      <div v-for="(log, i) in logs" :key="i" class="px-2 py-0.5 text-slate-400 hover:bg-surface-lighter/50 rounded transition">
+        <span class="text-slate-600 mr-2">{{ log.time }}</span>
+        <span :class="logLevelClass(log.level)">{{ log.message }}</span>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
