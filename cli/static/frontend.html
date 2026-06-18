@@ -59,7 +59,21 @@
     <aside class="w-80 shrink-0 bg-surface-light border-r border-slate-700 flex flex-col overflow-hidden">
       <!-- Config Form -->
       <div class="p-4 border-b border-slate-700 overflow-y-auto">
-        <!-- ═══ Profile Selector ═══ -->
+        <!-- ═══ 顶部切换器 ═══ -->
+        <div class="flex bg-surface rounded-lg p-0.5 mb-3">
+          <button @click="currentView = 'analysis'"
+            class="flex-1 py-2 rounded-md text-xs font-semibold transition-all duration-200"
+            :class="currentView === 'analysis' ? 'bg-accent text-slate-900 shadow-sm' : 'text-slate-400 hover:text-white'">
+            📈 基金股票分析
+          </button>
+          <button @click="currentView = 'policy'"
+            class="flex-1 py-2 rounded-md text-xs font-semibold transition-all duration-200"
+            :class="currentView === 'policy' ? 'bg-accent text-slate-900 shadow-sm' : 'text-slate-400 hover:text-white'">
+            🏛️ 热点板块推荐
+          </button>
+        </div>
+
+        <!-- ═══ Profile Selector（共享） ═══ -->
         <div class="mb-3 p-3 rounded-lg border border-accent/40 bg-surface/50">
           <div class="flex items-center justify-between mb-2">
             <span class="text-xs font-semibold text-accent">📁 配置方案</span>
@@ -103,6 +117,8 @@
           </div>
         </div>
 
+        <!-- ═══ 分析配置视图 ═══ -->
+        <div v-show="currentView === 'analysis'">
         <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">📋 分析配置</h2>
 
         <div class="space-y-3">
@@ -213,59 +229,59 @@
             分析中...
           </span>
         </button>
-      </div>
+        </div>
 
       <!-- ═══ 政策推荐入口 ═══ -->
-      <div class="border-t border-slate-700 p-4 bg-surface/30">
-        <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">🏛️ 政策扶持推荐</h2>
+      <div v-show="currentView === 'policy'">
+        <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">🏛️ 政策主题选择</h2>
 
         <!-- 主题选择 -->
         <div class="mb-3">
-          <div class="flex items-center justify-between mb-1">
-            <label class="block text-xs text-slate-400">选择主题</label>
-            <button @click="togglePolicyPanel" class="text-[10px] text-accent hover:text-white transition">
-              {{ showPolicyPanel ? '收起 ▲' : '展开 ▼' }}
-            </button>
+          <label class="block text-xs text-slate-400 mb-1">勾选政策主题（可多选）</label>
+          <div v-if="Object.keys(policyThemes).length === 0" class="text-xs text-slate-500 py-2">
+            加载主题中...
           </div>
-
-          <div v-if="showPolicyPanel" class="space-y-2">
-            <div v-if="Object.keys(policyThemes).length === 0" class="text-xs text-slate-500 py-2">
-              加载主题中...
-            </div>
-            <div v-else class="max-h-32 overflow-y-auto space-y-1 p-2 bg-surface border border-slate-600 rounded-lg">
-              <label v-for="(theme, name) in policyThemes" :key="name"
-                class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer hover:text-white transition py-0.5">
-                <input type="checkbox" :value="name" v-model="policySelectedThemes"
-                  class="rounded bg-surface border-slate-600 accent-accent" />
-                <span class="truncate">{{ name }}</span>
-              </label>
-            </div>
-
-            <!-- 日期 -->
-            <div>
-              <label class="block text-xs text-slate-400 mb-1">分析日期</label>
-              <input v-model="policyDate" type="date"
-                class="w-full px-2 py-1.5 bg-surface border border-slate-600 rounded-lg text-xs text-white focus:border-accent focus:outline-none transition" />
-            </div>
-
-            <!-- 深度分析 -->
-            <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-              <input v-model="policyDeep" type="checkbox" class="rounded bg-surface border-slate-600 accent-accent" />
-              深度配置建议 (使用多Agent)
+          <div v-else class="space-y-1 p-2 bg-surface border border-slate-600 rounded-lg max-h-40 overflow-y-auto">
+            <label v-for="(theme, name) in policyThemes" :key="name"
+              class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer hover:text-white transition py-1">
+              <input type="checkbox" :value="name" v-model="policySelectedThemes"
+                class="rounded bg-surface border-slate-600 accent-accent w-3.5 h-3.5" />
+              <span class="truncate">{{ name }}</span>
             </label>
+          </div>
+          <div class="flex gap-2 mt-1">
+            <button @click="policySelectedThemes = Object.keys(policyThemes)"
+              class="text-[10px] text-accent hover:text-white transition">全选</button>
+            <span class="text-[10px] text-slate-600">|</span>
+            <button @click="policySelectedThemes = []"
+              class="text-[10px] text-slate-500 hover:text-white transition">取消全选</button>
           </div>
         </div>
 
+        <!-- 日期 -->
+        <div class="mb-3">
+          <label class="block text-xs text-slate-400 mb-1">分析日期</label>
+          <input v-model="policyDate" type="date"
+            class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none transition" />
+        </div>
+
+        <!-- 深度分析 -->
+        <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer mb-4">
+          <input v-model="policyDeep" type="checkbox" class="rounded bg-surface border-slate-600 accent-accent w-3.5 h-3.5" />
+          深度配置建议（使用多 Agent 分析，较慢）
+        </label>
+
         <!-- 筛选按钮 -->
         <button @click="startPolicyRecommend" :disabled="policyLoading || policySelectedThemes.length === 0"
-          class="w-full py-2.5 rounded-lg font-bold text-xs transition-all duration-200"
+          class="w-full py-3 rounded-xl font-bold text-sm transition-all duration-200"
           :class="(policyLoading || policySelectedThemes.length === 0) ? 'bg-slate-600 text-slate-400 cursor-not-allowed' : 'bg-accent hover:bg-accent-dim text-slate-900 shadow-lg shadow-accent/20'">
-          <span v-if="!policyLoading">🔍 开始筛选</span>
+          <span v-if="!policyLoading">🔍 开始筛选 ({{ policySelectedThemes.length }} 个主题)</span>
           <span v-else class="flex items-center justify-center gap-2">
-            <span class="animate-spin inline-block w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full"></span>
+            <span class="animate-spin inline-block w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full"></span>
             筛选中...
           </span>
         </button>
+      </div>
       </div>
 
       <!-- Agent Status -->
@@ -301,18 +317,18 @@
     <main class="flex-1 flex flex-col overflow-hidden">
       <!-- Report Tabs -->
       <div class="flex items-center gap-1 px-4 py-2 bg-surface-light border-b border-slate-700 shrink-0 overflow-x-auto">
-        <button @click="showPolicyReport = false"
+        <button @click="currentView = 'analysis'"
           class="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200"
           :class="!showPolicyReport ? 'bg-accent text-slate-900 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-surface-lighter'">
           📈 分析报告
         </button>
-        <button @click="showPolicyReport = true"
+        <button @click="currentView = 'policy'"
           class="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200"
           :class="showPolicyReport ? 'bg-accent text-slate-900 shadow-sm' : 'text-slate-400 hover:text-white hover:bg-surface-lighter'">
           🏛️ 政策推荐
         </button>
         <div class="flex-1"></div>
-        <button v-for="tab in reportTabs" :key="tab.key" @click="activeTab = tab.key; showPolicyReport = false"
+        <button v-for="tab in reportTabs" :key="tab.key" @click="activeTab = tab.key"
           v-show="!showPolicyReport"
           class="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all duration-200"
           :class="activeTab === tab.key

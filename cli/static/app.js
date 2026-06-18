@@ -129,8 +129,6 @@
         chartInstance: null,
 
         // 政策推荐
-        showPolicyPanel: false,
-        showPolicyReport: false,
         policyThemes: {},
         policySelectedThemes: [],
         policyDate: new Date().toISOString().slice(0, 10),
@@ -151,6 +149,9 @@
       currentTabLabel: function () {
         var tab = this.reportTabs.find(function(t) { return t.key === this.activeTab; }, this);
         return tab ? tab.label : '';
+      },
+      showPolicyReport: function () {
+        return this.currentView === 'policy';
       },
       activeProfileConfig: function () {
         var p = this.profiles.find(function (x) { return x.name === this.activeProfileName; }, this);
@@ -701,10 +702,6 @@
       },
 
       // ── 政策推荐 ────────────────────────────────────────────────
-      togglePolicyPanel: function () {
-        this.showPolicyPanel = !this.showPolicyPanel;
-      },
-
       loadPolicyThemes: function () {
         var self = this;
         fetch('/api/policy-themes')
@@ -719,7 +716,7 @@
         var self = this;
         if (self.policySelectedThemes.length === 0) return;
         self.policyLoading = true;
-        self.showPolicyReport = true;
+        self.currentView = 'policy';
         self.policyReport = '';
 
         var payload = {
