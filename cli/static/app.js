@@ -128,8 +128,9 @@
         chartLoading: false,
         chartInstance: null,
 
-        // Policy recommend state
-        currentView: 'analysis',
+        // 政策推荐
+        showPolicyPanel: false,
+        showPolicyReport: false,
         policyThemes: {},
         policySelectedThemes: [],
         policyDate: new Date().toISOString().slice(0, 10),
@@ -699,35 +700,27 @@
           });
       },
 
-      // ── Policy Recommend ────────────────────────────────────────
+      // ── 政策推荐 ────────────────────────────────────────────────
+      togglePolicyPanel: function () {
+        this.showPolicyPanel = !this.showPolicyPanel;
+      },
+
       loadPolicyThemes: function () {
         var self = this;
         fetch('/api/policy-themes')
           .then(function (r) { return r.json(); })
           .then(function (data) {
             self.policyThemes = data.themes || {};
-            self.addLog('已加载 ' + Object.keys(self.policyThemes).length + ' 个政策主题');
           })
-          .catch(function (e) {
-            self.addLog('加载政策主题失败: ' + e.message, 'error');
-          });
+          .catch(function () {});
       },
 
       startPolicyRecommend: function () {
         var self = this;
-
-        if (self.policySelectedThemes.length === 0) {
-          self.addLog('请至少选择一个政策主题', 'warn');
-          return;
-        }
-        if (!self.policyDate) {
-          self.addLog('请选择分析日期', 'warn');
-          return;
-        }
-
+        if (self.policySelectedThemes.length === 0) return;
         self.policyLoading = true;
+        self.showPolicyReport = true;
         self.policyReport = '';
-        self.addLog('开始政策筛选: ' + self.policySelectedThemes.join(', ') + ' (' + self.policyDate + ')');
 
         var payload = {
           themes: self.policySelectedThemes.join(','),
@@ -747,17 +740,11 @@
         })
           .then(function (r) { return r.json(); })
           .then(function (data) {
-            if (data.error) {
-              self.addLog('政策筛选失败: ' + data.error, 'error');
-              self.policyReport = '## 错误\n\n' + data.error;
-            } else {
-              self.policyReport = data.report || '';
-              self.addLog('政策筛选完成');
-            }
+            self.policyReport = data.report || (data.error ? '## 错误\n\n' + data.error : '');
             self.policyLoading = false;
           })
           .catch(function (e) {
-            self.addLog('政策筛选请求失败: ' + e.message, 'error');
+            self.policyReport = '## 请求失败\n\n' + e.message;
             self.policyLoading = false;
           });
       },
