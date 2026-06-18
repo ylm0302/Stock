@@ -205,7 +205,14 @@
       },
 
       renderMarkdown: function (text) {
-        return safeMarkdown(text);
+        if (!text) return '';
+        // 缓存已解析的 Markdown，避免重复解析阻塞渲染
+        if (this._mdCache && this._mdCache.text === text) {
+          return this._mdCache.html;
+        }
+        var html = safeMarkdown(text);
+        this._mdCache = { text: text, html: html };
+        return html;
       },
 
       // ── Form ────────────────────────────────────────────────────

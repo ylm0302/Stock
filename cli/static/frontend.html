@@ -118,7 +118,7 @@
         </div>
 
         <!-- ═══ 分析配置视图 ═══ -->
-        <div v-show="currentView === 'analysis'">
+        <div v-if="currentView === 'analysis'">
         <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">📋 分析配置</h2>
 
         <div class="space-y-3">
@@ -232,7 +232,7 @@
         </div>
 
       <!-- ═══ 政策推荐入口 ═══ -->
-      <div v-show="currentView === 'policy'">
+      <div v-if="currentView === 'policy'">
         <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">🏛️ 政策主题选择</h2>
 
         <!-- 主题选择 -->
