@@ -104,3 +104,75 @@ def test_threshold_all_missing_passes():
     """指标全缺失（akshare 不可用降级）时，不因资金面被淘汰。"""
     m = FundFlowMetrics(ticker="X")
     assert passes_threshold(m, THRESHOLDS) is True
+
+
+# ── fetch_metrics ─────────────────────────────────────────────────
+
+from unittest.mock import patch, MagicMock
+import pandas as pd
+from tradingagents.policy_screener.fund_flow_scorer import fetch_metrics
+
+
+def _stock_fund_flow_df():
+    return pd.DataFrame({
+        "日期": ["20260610", "20260611"],
+        "主力净流入-净占比": [0.2, -0.3],   # 近2日合计 ≈ -0.1%（近未介入）
+    })
+
+
+def _stock_hist_df():
+    return pd.DataFrame({
+        "日期": ["20260601", "20260610"],
+        "收盘": [10.0, 10.2],
+        "换手率": [2.0, 3.0],
+        "涨跌幅": [0.0, 2.0],
+    })
+
+
+def _hsgt_df():
+    return pd.DataFrame({
+        "持股日期": ["20260610", "20260611"],
+        "今日增持资金": [100.0, -50.0],   # 百万元
+    })
+
+
+def test_fetch_stock_metrics_aggregates_three_sources():
+    with patch("akshare.stock_individual_fund_flow", return_value=_stock_fund_flow_df()), \
+         patch("akshare.stock_zh_a_hist", return_value=_stock_hist_df()), \
+         patch("akshare.stock_hsgt_individual_em", return_value=_hsgt_df()):
+        m = fetch_metrics("600584.SS", "2026-06-18", lookback=10, is_fund=False)
+    assert m.ticker == "600584.SS"
+    assert m.is_fund is False
+    assert m.main_net_inflow_ratio is not None
+    assert m.price_gain_ratio is not None       # (10.2-10)/10 = 0.02
+    assert abs(m.price_gain_ratio - 0.02) < 1e-9
+    assert m.turnover_rate is not None         # 均值 2.5% = 0.025
+    assert abs(m.turnover_rate - 0.025) < 1e-9
+    assert m.fetch_error is None
+
+
+def test_fetch_stock_metrics_degrades_on_failure():
+    """akshare 抛异常时，metrics 字段为空但带 fetch_error，不抛。"""
+    with patch("akshare.stock_individual_fund_flow", side_effect=RuntimeError("timeout")), \
+         patch("akshare.stock_zh_a_hist", side_effect=RuntimeError("timeout")), \
+         patch("akshare.stock_hsgt_individual_em", side_effect=RuntimeError("timeout")):
+        m = fetch_metrics("600584.SS", "2026-06-18", lookback=10, is_fund=False)
+    assert m.main_net_inflow_ratio is None
+    assert m.price_gain_ratio is None
+    assert m.fetch_error is not None
+    assert "timeout" in m.fetch_error
+
+
+def test_fetch_fund_metrics_uses_etf_hist():
+    etf_df = pd.DataFrame({
+        "日期": ["20260601", "20260610"],
+        "收盘": [1.0, 1.02],
+        "换手率": [1.5, 2.5],
+        "涨跌幅": [0.0, 2.0],
+    })
+    with patch("akshare.fund_etf_hist_em", return_value=etf_df):
+        m = fetch_metrics("159995", "2026-06-18", lookback=10, is_fund=True)
+    assert m.is_fund is True
+    assert m.main_net_inflow_ratio is None      # 基金无主力净流入口径
+    assert m.price_gain_ratio is not None
+    assert m.turnover_rate is not None

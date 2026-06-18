@@ -9,6 +9,8 @@
 
 from __future__ import annotations
 
+import pandas as pd
+
 from .models import FundFlowMetrics
 
 
@@ -84,3 +86,115 @@ def passes_threshold(metrics: FundFlowMetrics, thresholds: dict) -> bool:
     if not checks:
         return True
     return all(checks)
+
+
+# ── akshare 拉取层 ──────────────────────────────────────────────
+
+def _to_int_date(date_str: str) -> str:
+    """'2026-06-18' → '20260618'。"""
+    return date_str.replace("-", "")
+
+
+def _strip_suffix(ticker: str) -> str:
+    return ticker.split(".")[0]
+
+
+def fetch_metrics(ticker: str, end_date: str, lookback: int, is_fund: bool) -> FundFlowMetrics:
+    """从 akshare 拉取单只标的近 lookback 日资金面指标。
+
+    任何异常都被吞掉并记入 fetch_error，绝不抛出（降级由调用方处理）。
+    """
+    if is_fund:
+        return _fetch_fund_metrics(ticker, end_date, lookback)
+    return _fetch_stock_metrics(ticker, end_date, lookback)
+
+
+def _fetch_stock_metrics(ticker: str, end_date: str, lookback: int) -> FundFlowMetrics:
+    import akshare as ak
+
+    code = _strip_suffix(ticker)
+    market = "sh" if ticker.endswith(".SS") else "sz"
+    int_end = _to_int_date(end_date)
+
+    main_ratio = None
+    north = None
+    gain = None
+    turnover = None
+    errors = []
+
+    # 1) 个股资金流（主力净流入占比）
+    try:
+        df = ak.stock_individual_fund_flow(stock=code, market=market)
+        if df is not None and not df.empty and "主力净流入-净占比" in df.columns:
+            recent = df.tail(lookback)
+            # 净占比是百分数（如 0.2 表示 0.2%），转成小数
+            main_ratio = float(pd.to_numeric(recent["主力净流入-净占比"], errors="coerce").sum()) / 100.0
+    except Exception as e:
+        errors.append(f"fund_flow:{e}")
+
+    # 2) 个股日线（涨幅、换手率）
+    try:
+        # 近 lookback*2 个自然日，确保有足够交易日
+        df = ak.stock_zh_a_hist(symbol=code, period="daily",
+                               start_date=int_end, end_date=int_end, adjust="")
+        # 上面的 start==end 可能只取到一天；放宽窗口重取
+        if df is None or df.empty:
+            df = ak.stock_zh_a_hist(symbol=code, period="daily", adjust="")
+        if df is not None and not df.empty and "收盘" in df.columns:
+            recent = df.tail(lookback)
+            closes = pd.to_numeric(recent["收盘"], errors="coerce").dropna()
+            if len(closes) >= 2:
+                gain = float((closes.iloc[-1] - closes.iloc[0]) / closes.iloc[0])
+            if "换手率" in recent.columns:
+                turnover = float(pd.to_numeric(recent["换手率"], errors="coerce").mean()) / 100.0
+    except Exception as e:
+        errors.append(f"hist:{e}")
+
+    # 3) 北向个股持股
+    try:
+        df = ak.stock_hsgt_individual_em(symbol=code)
+        if df is not None and not df.empty and "今日增持资金" in df.columns:
+            recent = df.tail(lookback)
+            north = float(pd.to_numeric(recent["今日增持资金"], errors="coerce").sum())
+    except Exception as e:
+        errors.append(f"hsgt:{e}")
+
+    return FundFlowMetrics(
+        ticker=ticker,
+        main_net_inflow_ratio=main_ratio,
+        north_inflow=north,
+        price_gain_ratio=gain,
+        turnover_rate=turnover,
+        is_fund=False,
+        fetch_error="; ".join(errors) if errors else None,
+    )
+
+
+def _fetch_fund_metrics(ticker: str, end_date: str, lookback: int) -> FundFlowMetrics:
+    import akshare as ak
+
+    code = _strip_suffix(ticker)
+    gain = None
+    turnover = None
+    errors = []
+
+    try:
+        df = ak.fund_etf_hist_em(symbol=code, period="daily", adjust="")
+        if df is not None and not df.empty and "收盘" in df.columns:
+            recent = df.tail(lookback)
+            closes = pd.to_numeric(recent["收盘"], errors="coerce").dropna()
+            if len(closes) >= 2:
+                gain = float((closes.iloc[-1] - closes.iloc[0]) / closes.iloc[0])
+            if "换手率" in recent.columns:
+                turnover = float(pd.to_numeric(recent["换手率"], errors="coerce").mean()) / 100.0
+    except Exception as e:
+        errors.append(f"etf_hist:{e}")
+
+    return FundFlowMetrics(
+        ticker=ticker,
+        price_gain_ratio=gain,
+        turnover_rate=turnover,
+        is_fund=True,
+        # 基金无主力净流入/北向口径，main_net_inflow_ratio 保持 None
+        fetch_error="; ".join(errors) if errors else None,
+    )
