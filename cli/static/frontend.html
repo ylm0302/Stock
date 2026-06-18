@@ -5,23 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>TradingAgents · Multi-Agent Trading Dashboard</title>
 
-  <!-- Tailwind CSS (local) -->
-  <script src="/libs/tailwindcss.js"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            surface: { DEFAULT: '#0f172a', light: '#1e293b', lighter: '#334155' },
-            accent: { DEFAULT: '#38bdf8', dim: '#0ea5e9' },
-            success: '#22c55e',
-            warning: '#eab308',
-            danger: '#ef4444',
-          }
-        }
-      }
-    }
-  </script>
+  <!-- Tailwind CSS（预编译静态文件，零运行时编译，切换不卡顿） -->
+  <link rel="stylesheet" href="/tailwind.css" />
 
   <!-- Vue 3 (local) -->
   <script src="/libs/vue.global.prod.js"></script>
