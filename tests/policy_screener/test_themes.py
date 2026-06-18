@@ -84,3 +84,29 @@ def test_get_theme_unknown_raises():
     cfg = ThemeConfig({"半导体": {"keywords": ["k"], "sectors": ["s"], "funds": []}})
     with pytest.raises(KeyError):
         cfg.get_theme("不存在")
+
+
+def test_theme_non_list_field_raises(tmp_path):
+    """字段写成字符串（非列表）应报错。"""
+    p = _write_yaml(tmp_path, """
+        themes:
+          半导体:
+            keywords: "半导体"     # 应为列表，这里故意写成字符串
+            sectors: ["半导体"]
+            funds: []
+    """)
+    with pytest.raises(ValueError, match="必须是列表"):
+        load_themes(str(p), enabled=[])
+
+
+def test_enabled_unknown_name_raises(tmp_path):
+    """enabled 中传入不存在的主题名应报错。"""
+    p = _write_yaml(tmp_path, """
+        themes:
+          A:
+            keywords: ["a"]
+            sectors: ["a"]
+            funds: []
+    """)
+    with pytest.raises(ValueError, match="未知主题"):
+        load_themes(str(p), enabled=["不存在"])
