@@ -140,6 +140,29 @@ python fund_main.py
 | `270002` | 广发稳增债券 | 债券型 |
 | `000961` | 天弘沪深 300ETF 联接 A | 指数型 |
 
+## 政策扶持标的推荐筛选器
+
+按"国家政策大力扶持 + 主力资金尚未大规模介入"筛选 A 股股票与基金/ETF，输出 Markdown 推荐池，并可对 Top 标的跑多 Agent 深度配置建议。
+
+### 快速开始
+
+```bash
+# 仅量化筛选（无需 API Key）
+python policy_main.py --themes 新质生产力,低空经济 --date 2026-06-18
+
+# 含 Top 3 深度配置建议（需 LLM API Key）
+python policy_main.py --themes 新质生产力 --deep
+```
+
+报告输出至 `reports/policy_<date>.md`。
+
+### 主题与阈值
+
+- 主题映射表：`tradingagents/policy_screener/data/policy_themes.yaml`（可自行增删主题、板块、基金代码）
+- "主力未介入"阈值与打分权重：见 `tradingagents/default_config.py` 的 `policy_*` 配置项，可通过环境变量覆盖 `TRADINGAGENTS_POLICY_LOOKBACK_DAYS` 等
+
+> ⚠️ 本工具仅供研究学习，不构成投资建议。
+
 ### 方式三：交互式 CLI
 
 ```bash
