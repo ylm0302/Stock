@@ -15,6 +15,8 @@ from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.dataflows.utils import safe_ticker_component
 from tradingagents.llm_clients.api_key_env import PROVIDER_API_KEY_ENV
+from tradingagents.policy_screener.runner import PolicyScreenerRunner, build_llm
+from tradingagents.policy_screener.themes import load_themes
 
 LOG_NAME_RE = re.compile(r"^full_states_log_(\d{4}-\d{2}-\d{2})\.json$")
 RESULTS_DIR = Path(DEFAULT_CONFIG["results_dir"]).expanduser().resolve()
@@ -511,6 +513,9 @@ class FrontendHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/profiles/activate":
             self.handle_profiles_activate()
             return
+        if parsed.path == "/api/policy-recommend":
+            self.handle_api_policy_recommend()
+            return
         self.send_error(404, "Unknown API endpoint")
 
     # ── GET API routing ──────────────────────────────────────────────────
@@ -525,6 +530,10 @@ class FrontendHandler(SimpleHTTPRequestHandler):
 
         if parsed.path == "/api/tickers":
             self.send_json({"tickers": list_ticker_logs()})
+            return
+
+        if parsed.path == "/api/policy-themes":
+            self.handle_api_policy_themes()
             return
 
         if parsed.path == "/api/report":
@@ -806,6 +815,69 @@ class FrontendHandler(SimpleHTTPRequestHandler):
             self.send_json({"ok": True, "active": data["active"]})
         except OSError as exc:
             self.send_error(500, f"Failed to save profiles: {exc}")
+
+    # ── Policy Recommend ───────────────────────────────────────────────
+
+    def handle_api_policy_recommend(self):
+        content_length = int(self.headers.get("Content-Length", 0))
+        raw_body = self.rfile.read(content_length)
+        try:
+            payload = json.loads(raw_body.decode("utf-8"))
+        except Exception:
+            self.send_error(400, "Invalid JSON payload")
+            return
+
+        themes_str = payload.get("themes", "")
+        date = payload.get("date", "")
+        deep = payload.get("deep", False)
+        llm_provider = payload.get("llm_provider") or "deepseek"
+        shallow_thinker = payload.get("shallow_thinker") or ""
+        deep_thinker = payload.get("deep_thinker") or ""
+        api_key = payload.get("api_key") or ""
+        backend_url = payload.get("backend_url") or ""
+
+        # Parse themes (comma-separated)
+        themes_list = [t.strip() for t in themes_str.split(",") if t.strip()]
+
+        # Set API key in environment for LLM client
+        env_var = PROVIDER_API_KEY_ENV.get(llm_provider.lower())
+        if env_var and api_key:
+            os.environ[env_var] = api_key
+
+        config = DEFAULT_CONFIG.copy()
+        config["output_language"] = "Chinese"
+        config["llm_provider"] = llm_provider.lower()
+        if shallow_thinker:
+            config["quick_think_llm"] = shallow_thinker
+        if deep_thinker:
+            config["deep_think_llm"] = deep_thinker
+        if backend_url:
+            config["backend_url"] = backend_url
+
+        llm = build_llm(config)
+        graph = None
+        if deep and llm is not None:
+            from tradingagents.graph.trading_graph import TradingAgentsGraph
+            graph = TradingAgentsGraph(
+                selected_analysts=["market", "social", "news", "fundamentals"],
+                debug=True, config=config,
+            )
+
+        runner = PolicyScreenerRunner(config, llm=llm, graph=graph)
+        try:
+            report = runner.run(themes=themes_list, date=date, deep_analyze=deep)
+            self.send_json({"report": report, "themes": themes_list, "date": date})
+        except Exception as e:
+            self.send_json({"error": str(e), "report": None}, status=500)
+
+    def handle_api_policy_themes(self):
+        try:
+            config = DEFAULT_CONFIG.copy()
+            theme_cfg = load_themes(config["policy_themes_file"], enabled=[])
+            themes = theme_cfg.all_themes()
+            self.send_json({"themes": themes})
+        except Exception as e:
+            self.send_json({"error": str(e), "themes": {}}, status=500)
 
     # ── helpers ──────────────────────────────────────────────────────────
 
