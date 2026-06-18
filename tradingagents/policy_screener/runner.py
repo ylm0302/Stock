@@ -7,15 +7,16 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from .expander import expand_themes, fetch_board_cons
 # 从子模块引用 fetch_metrics / qualify，便于测试 monkeypatch 替换
 from .fund_flow_scorer import fetch_metrics, score_metrics
 from .llm_qualifier import qualify
 from .models import Candidate, ScoredCandidate
+from .news_hotspot import extract_hotspots_with_llm, fetch_cn_hotspot_news, match_boards
 from .ranker import rank_candidates
-from .reporter import render_report
+from .reporter import render_hotspot_report, render_report
 from .themes import load_themes
 
 logger = logging.getLogger(__name__)
