@@ -128,6 +128,9 @@
         chartLoading: false,
         chartInstance: null,
 
+        // 视图切换
+        currentView: 'analysis',        // 'analysis' | 'policy'
+
         // 政策推荐
         policyCategories: [],           // 分类列表 [{name, boards: [{name, keywords, funds}]}]
         policySelectedBoards: [],       // 选中的板块名列表
