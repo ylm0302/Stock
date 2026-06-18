@@ -10,7 +10,7 @@ def test_run_policy_recommend_invokes_runner(tmp_path, capsys):
     )
 
     with patch("cli.policy.PolicyScreenerRunner") as MockRunner, \
-         patch("cli.policy._build_llm", return_value=None):
+         patch("cli.policy.build_llm", return_value=None):
         instance = MockRunner.return_value
         instance.run.return_value = "# 报告"
 

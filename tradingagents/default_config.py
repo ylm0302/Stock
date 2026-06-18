@@ -131,8 +131,6 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # 政策扶持标的推荐筛选器（policy_screener）配置
     # 预置主题映射表路径（相对项目根，用户可改）
     "policy_themes_file": "tradingagents/policy_screener/data/policy_themes.yaml",
-    # 启用的主题名列表；空列表 = 启用映射表中的全部主题
-    "policy_enabled_themes": [],
     "policy_lookback_days": 10,            # 资金面回看天数
     "policy_top_n": 10,                    # 推荐池保留数量
     "policy_deep_analyze_top": 3,          # 对前 N 个跑深度 Agent

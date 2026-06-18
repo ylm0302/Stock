@@ -137,8 +137,8 @@ def _fetch_stock_metrics(ticker: str, end_date: str, lookback: int) -> FundFlowM
         # 近 lookback*2 个自然日，确保有足够交易日
         df = ak.stock_zh_a_hist(symbol=code, period="daily",
                                start_date=int_end, end_date=int_end, adjust="")
-        # 上面的 start==end 可能只取到一天；放宽窗口重取
-        if df is None or df.empty:
+        # 上面 start==end 可能只取到一天；放宽窗口重取
+        if df is None or df.empty or len(df) < 2:
             df = ak.stock_zh_a_hist(symbol=code, period="daily", adjust="")
         if df is not None and not df.empty and "收盘" in df.columns:
             recent = df.tail(lookback)

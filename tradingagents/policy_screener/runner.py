@@ -21,6 +21,18 @@ from .themes import load_themes
 logger = logging.getLogger(__name__)
 
 
+def build_llm(config: dict):
+    """按 config 构造 LLM；失败返回 None。"""
+    try:
+        from tradingagents.llm_clients.factory import create_llm_client
+        provider = config["llm_provider"]
+        model = config["quick_think_llm"]
+        client = create_llm_client(provider, model, config.get("backend_url"))
+        return client.get_llm()
+    except Exception:
+        return None
+
+
 class PolicyScreenerRunner:
     """政策筛选器编排器。"""
 

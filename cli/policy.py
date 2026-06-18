@@ -8,19 +8,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from tradingagents.default_config import DEFAULT_CONFIG
-from tradingagents.policy_screener.runner import PolicyScreenerRunner
-
-
-def _build_llm(config: dict):
-    """按 config 构造 LLM；失败返回 None。"""
-    try:
-        from tradingagents.llm_clients.factory import create_llm_client
-        provider = config["llm_provider"]
-        model = config["quick_think_llm"]
-        client = create_llm_client(provider, model, config.get("backend_url"))
-        return client.get_llm()
-    except Exception:
-        return None
+from tradingagents.policy_screener.runner import PolicyScreenerRunner, build_llm
 
 
 def run_policy_recommend(
@@ -35,7 +23,7 @@ def run_policy_recommend(
     if config_overrides:
         config.update(config_overrides)
 
-    llm = _build_llm(config)
+    llm = build_llm(config)
     graph = None
     if deep and llm is not None:
         from tradingagents.graph.trading_graph import TradingAgentsGraph

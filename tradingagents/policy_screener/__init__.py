@@ -4,6 +4,6 @@
     PolicyScreenerRunner — 编排筛选全流程并产出 Markdown 报告
 """
 
-from .runner import PolicyScreenerRunner
+from .runner import PolicyScreenerRunner, build_llm
 
-__all__ = ["PolicyScreenerRunner"]
+__all__ = ["PolicyScreenerRunner", "build_llm"]

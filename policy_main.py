@@ -19,20 +19,7 @@ import os
 from datetime import datetime
 
 from tradingagents.default_config import DEFAULT_CONFIG
-from tradingagents.policy_screener.runner import PolicyScreenerRunner
-
-
-def _build_llm(config: dict):
-    """按 config 构造 LLM；未配置 API Key 时返回 None（降级为纯量化）。"""
-    try:
-        from tradingagents.llm_clients.factory import create_llm_client
-        provider = config["llm_provider"]
-        model = config["quick_think_llm"]
-        client = create_llm_client(provider, model, config.get("backend_url"))
-        return client.get_llm()
-    except Exception as e:
-        print(f"[warn] LLM 初始化失败，将仅使用量化打分: {e}")
-        return None
+from tradingagents.policy_screener.runner import PolicyScreenerRunner, build_llm
 
 
 def main():
@@ -55,7 +42,7 @@ def main():
 
     themes = [t.strip() for t in args.themes.split(",") if t.strip()]
 
-    llm = _build_llm(config)
+    llm = build_llm(config)
     graph = None
     if args.deep and llm is not None:
         from tradingagents.graph.trading_graph import TradingAgentsGraph
