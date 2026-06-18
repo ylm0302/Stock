@@ -17,6 +17,9 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_MAX_RISK_ROUNDS":      "max_risk_discuss_rounds",
     "TRADINGAGENTS_CHECKPOINT_ENABLED":   "checkpoint_enabled",
     "TRADINGAGENTS_BENCHMARK_TICKER":     "benchmark_ticker",
+    "TRADINGAGENTS_POLICY_LOOKBACK_DAYS":   "policy_lookback_days",
+    "TRADINGAGENTS_POLICY_TOP_N":           "policy_top_n",
+    "TRADINGAGENTS_POLICY_DEEP_ANALYZE_TOP": "policy_deep_analyze_top",
 }
 
 
@@ -125,4 +128,24 @@ DEFAULT_CONFIG = _apply_env_overrides({
     "fund_benchmark_ticker": "510300.SS",
     # 基金分析时的持仓回溯天数（用于净值历史分析）
     "fund_nav_lookback_days": 90,
+    # 政策扶持标的推荐筛选器（policy_screener）配置
+    # 预置主题映射表路径（相对项目根，用户可改）
+    "policy_themes_file": "tradingagents/policy_screener/data/policy_themes.yaml",
+    # 启用的主题名列表；空列表 = 启用映射表中的全部主题
+    "policy_enabled_themes": [],
+    "policy_lookback_days": 10,            # 资金面回看天数
+    "policy_top_n": 10,                    # 推荐池保留数量
+    "policy_deep_analyze_top": 3,          # 对前 N 个跑深度 Agent
+    # "主力未介入"判定阈值（标的需同时满足才进推荐池）
+    "policy_thresholds": {
+        "main_net_inflow_ratio": 0.01,     # 主力净流入合计 / 流通市值 ≤ 1%
+        "price_gain_ratio": 0.15,          # 区间涨幅 ≤ 15%
+        "turnover_rate": 0.05,             # 日均换手率 ≤ 5%
+    },
+    # 综合分权重，三者之和应为 1.0
+    "policy_weights": {
+        "relevance": 0.30,                 # 政策相关度
+        "fund_flow": 0.45,                 # 资金面量化
+        "llm_qualitative": 0.25,           # LLM 定性
+    },
 })
