@@ -129,8 +129,8 @@ DEFAULT_CONFIG = _apply_env_overrides({
     # 基金分析时的持仓回溯天数（用于净值历史分析）
     "fund_nav_lookback_days": 90,
     # 政策扶持标的推荐筛选器（policy_screener）配置
-    # 预置主题映射表路径（相对项目根，用户可改）
-    "policy_themes_file": "tradingagents/policy_screener/data/policy_themes.yaml",
+    # 预置板块映射表路径（按行业大类组织，用户可改）
+    "policy_themes_file": "tradingagents/policy_screener/data/sector_boards.yaml",
     "policy_lookback_days": 10,            # 资金面回看天数
     "policy_top_n": 10,                    # 推荐池保留数量
     "policy_deep_analyze_top": 3,          # 对前 N 个跑深度 Agent

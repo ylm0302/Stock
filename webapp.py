@@ -873,11 +873,21 @@ class FrontendHandler(SimpleHTTPRequestHandler):
     def handle_api_policy_themes(self):
         try:
             config = DEFAULT_CONFIG.copy()
-            theme_cfg = load_themes(config["policy_themes_file"], enabled=[])
-            themes = theme_cfg.all_themes()
-            self.send_json({"themes": themes})
+            cfg = load_themes(config["policy_themes_file"], enabled=[])
+            # 返回分类+板块数据
+            categories = []
+            for cat_name, board_names in cfg.all_categories().items():
+                boards = []
+                for bn in board_names:
+                    try:
+                        b = cfg.get_board(bn)
+                        boards.append({"name": b.name, "keywords": b.keywords, "funds": b.funds})
+                    except KeyError:
+                        pass
+                categories.append({"name": cat_name, "boards": boards})
+            self.send_json({"categories": categories})
         except Exception as e:
-            self.send_json({"error": str(e), "themes": {}}, status=500)
+            self.send_json({"error": str(e), "categories": []}, status=500)
 
     # ── helpers ──────────────────────────────────────────────────────────
 

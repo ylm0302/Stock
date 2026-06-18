@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/pip show *)",
+      "Bash(.venv/bin/python -c \"import akshare as ak; help\\(ak.stock_board_consortium_cons_em\\)\")",
+      "Bash(.venv/bin/python -c \"import akshare as ak; help\\(ak.stock_board_concept_name_em\\)\")",
+      "Bash(python3 -c \"import akshare as ak; help\\(ak.stock_hsgt_individual_em\\)\")",
+      "Bash(python3 -c \"import akshare as ak; print\\([x for x in dir\\(ak\\) if 'hsgt' in x]\\)\")",
+      "Bash(python3 -c \"import akshare as ak; print\\([x for x in dir\\(ak\\) if 'fund_etf' in x or 'fund_open' in x]\\)\")",
+      "Bash(python3 -c \"import akshare as ak; help\\(ak.stock_board_concept_cons_em\\)\")",
+      "Bash(python3 -c \"import akshare as ak; df = ak.stock_board_concept_cons_em\\(symbol='半导体'\\); print\\(df.columns.tolist\\(\\)\\); print\\(df.head\\(3\\)\\)\")",
+      "Bash(python3 -c \"import akshare as ak; df = ak.stock_individual_fund_flow\\(stock='002008', market='sz'\\); print\\(df.columns.tolist\\(\\)\\); print\\(df.head\\(3\\)\\)\")",
+      "Bash(python3 -c \"import akshare as ak; df = ak.stock_zh_a_hist\\(symbol='002008', period='daily', start_date='20250601', end_date='20250618', adjust=''\\); print\\(df.columns.tolist\\(\\)\\); print\\(df.head\\(3\\)\\)\")",
+      "Bash(python3 -c \"import akshare as ak; df = ak.stock_hsgt_individual_em\\(symbol='002008'\\); print\\(df.columns.tolist\\(\\)\\); print\\(df.head\\(3\\)\\)\")",
+      "Bash(python3 -c \"import akshare as ak; help\\(ak.fund_etf_fund_daily_em\\)\")",
+      "Bash(.venv/bin/python -c \"import yaml; print\\('pyyaml OK', yaml.__version__\\)\")"
+    ]
+  }
+}

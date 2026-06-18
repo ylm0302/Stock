@@ -1,0 +1,113 @@
+# 行业板块推荐映射表
+# 按"国家政策扶持 + 主力介入少"筛选 A 股板块成分股。
+#
+# 结构：categories（大类）→ 每类下多个 board（板块）
+# - board:  东财概念板块名（优先标准名）。运行时会做模糊匹配：
+#           若精确名拉不到成分股，自动用 keywords 在东财全部板块中
+#           模糊匹配最接近的一个，再拉成分股。
+# - keywords: 模糊匹配用的关键词（含该词的板块视为候选）
+# - funds:    相关 ETF/基金代码（6位，可选）
+#
+# 用户可自行增删改。新增板块时至少填 board + keywords。
+
+categories:
+  科技/半导体/通信:
+    - board: "半导体"
+      keywords: ["半导体", "芯片", "集成电路", "晶圆"]
+      funds: ["159995", "512480"]
+    - board: "CPO概念"
+      keywords: ["CPO", "共封装", "光电共封", "光模块"]
+      funds: ["159583"]
+    - board: "PCB概念"
+      keywords: ["PCB", "印制电路", "覆铜板", "线路板"]
+      funds: ["562600"]
+    - board: "通信设备"
+      keywords: ["通信", "5G", "光通信", "传输设备"]
+      funds: ["515880"]
+    - board: "5G概念"
+      keywords: ["5G", "第五代移动通信", "基站"]
+      funds: ["515050"]
+    - board: "6G概念"
+      keywords: ["6G", "卫星通信", "太赫兹"]
+      funds: []
+    - board: "光通信"
+      keywords: ["光通信", "光模块", "光器件", "光纤"]
+      funds: ["159911"]
+    - board: "存储芯片"
+      keywords: ["存储", "DRAM", "NAND", "HBM"]
+      funds: []
+    - board: "算力"
+      keywords: ["算力", "AI算力", "数据中心", "液冷"]
+      funds: ["159995"]
+    - board: "消费电子"
+      keywords: ["消费电子", "VR", "AR", "折叠屏"]
+      funds: ["159995"]
+
+  AI/机器人/新兴:
+    - board: "人工智能"
+      keywords: ["人工智能", "AI", "大模型", "AIGC"]
+      funds: ["159819"]
+    - board: "机器人概念"
+      keywords: ["机器人", "人形机器人", "减速器", "伺服"]
+      funds: ["562500"]
+    - board: "数据要素"
+      keywords: ["数据要素", "数据交易", "数字经济", "数据确权"]
+      funds: ["159993"]
+    - board: "脑机接口"
+      keywords: ["脑机", "脑机接口", "神经接口"]
+      funds: []
+    - board: "卫星导航"
+      keywords: ["卫星", "北斗", "导航", "星链"]
+      funds: ["159781"]
+    - board: "低空经济"
+      keywords: ["低空经济", "eVTOL", "无人机", "通用航空"]
+      funds: ["159357"]
+    - board: "Web3.0"
+      keywords: ["Web3", "区块链", "数字货币"]
+      funds: []
+
+  新能源:
+    - board: "光伏设备"
+      keywords: ["光伏", "太阳能", "TOPCon", "HJT"]
+      funds: ["516160"]
+    - board: "风电设备"
+      keywords: ["风电", "风力", "海上风电", "塔筒"]
+      funds: ["561860"]
+    - board: "储能"
+      keywords: ["储能", "储能电池", "BMS"]
+      funds: ["159872"]
+    - board: "固态电池"
+      keywords: ["固态电池", "半固态", "硫化物", "电解质"]
+      funds: []
+    - board: "可控核聚变"
+      keywords: ["核聚变", "可控核聚变", "托卡马克", "超导磁体"]
+      funds: []
+    - board: "核电"
+      keywords: ["核电", "核能", "核反应堆", "小型堆"]
+      funds: []
+    - board: "氢能源"
+      keywords: ["氢能", "氢燃料电池", "电解槽", "加氢"]
+      funds: []
+
+  高端制造/军工:
+    - board: "军工"
+      keywords: ["军工", "国防", "军品", "装备"]
+      funds: ["512660"]
+    - board: "大飞机"
+      keywords: ["大飞机", "C919", "国产大飞机", "航空制造"]
+      funds: ["159007"]
+    - board: "航天概念"
+      keywords: ["航天", "商业航天", "运载火箭", "空间站"]
+      funds: []
+    - board: "工业母机"
+      keywords: ["工业母机", "机床", "数控", "五轴"]
+      funds: ["159766"]
+    - board: "高端装备"
+      keywords: ["高端装备", "工程机械", "专用设备"]
+      funds: ["159766"]
+    - board: "新材料"
+      keywords: ["新材料", "碳纤维", "稀土", "半导体材料"]
+      funds: ["516590"]
+    - board: "量子通信"
+      keywords: ["量子", "量子通信", "量子计算", "量子密码"]
+      funds: []

@@ -129,8 +129,8 @@
         chartInstance: null,
 
         // 政策推荐
-        policyThemes: {},
-        policySelectedThemes: [],
+        policyCategories: [],           // 分类列表 [{name, boards: [{name, keywords, funds}]}]
+        policySelectedBoards: [],       // 选中的板块名列表
         policyDate: new Date().toISOString().slice(0, 10),
         policyDeep: false,
         policyLoading: false,
@@ -206,11 +206,13 @@
 
       renderMarkdown: function (text) {
         if (!text) return '';
-        // 缓存已解析的 Markdown，避免重复解析阻塞渲染
         if (this._mdCache && this._mdCache.text === text) {
           return this._mdCache.html;
         }
+        var t0 = performance.now();
         var html = safeMarkdown(text);
+        var t1 = performance.now();
+        if (text.length > 100) console.log('[perf] renderMarkdown len=' + text.length + ' took ' + Math.round(t1 - t0) + 'ms');
         this._mdCache = { text: text, html: html };
         return html;
       },
@@ -714,20 +716,40 @@
         fetch('/api/policy-themes')
           .then(function (r) { return r.json(); })
           .then(function (data) {
-            self.policyThemes = data.themes || {};
+            self.policyCategories = data.categories || [];
           })
           .catch(function () {});
       },
 
+      // 统计某分类下已选板块数
+      countSelectedInCategory: function (cat) {
+        var self = this;
+        return cat.boards.filter(function (b) { return self.policySelectedBoards.indexOf(b.name) !== -1; }).length;
+      },
+
+      // 切换某分类全选/取消
+      toggleCategory: function (cat) {
+        var self = this;
+        var catBoards = cat.boards.map(function (b) { return b.name; });
+        var selectedCount = self.countSelectedInCategory(cat);
+        if (selectedCount === catBoards.length) {
+          // 全选了 → 全部取消
+          self.policySelectedBoards = self.policySelectedBoards.filter(function (n) { return catBoards.indexOf(n) === -1; });
+        } else {
+          // 否则全选
+          catBoards.forEach(function (n) { if (self.policySelectedBoards.indexOf(n) === -1) self.policySelectedBoards.push(n); });
+        }
+      },
+
       startPolicyRecommend: function () {
         var self = this;
-        if (self.policySelectedThemes.length === 0) return;
+        if (self.policySelectedBoards.length === 0) return;
         self.policyLoading = true;
         self.currentView = 'policy';
         self.policyReport = '';
 
         var payload = {
-          themes: self.policySelectedThemes.join(','),
+          themes: self.policySelectedBoards.join(','),
           date: self.policyDate,
           deep: self.policyDeep,
           llm_provider: self.form.llm_provider || 'deepseek',
@@ -757,9 +779,13 @@
     // ── Lifecycle ─────────────────────────────────────────────────
     mounted: function () {
       var self = this;
+      console.log('[perf] mounted start', Math.round(performance.now()) + 'ms');
       self.loadHistory();
+      console.log('[perf] after loadHistory', Math.round(performance.now()) + 'ms');
       self.loadProfiles();
+      console.log('[perf] after loadProfiles', Math.round(performance.now()) + 'ms');
       self.loadPolicyThemes();
+      console.log('[perf] after loadPolicyThemes', Math.round(performance.now()) + 'ms');
 
       // Initial health check
       fetch('/api/status')
@@ -795,5 +821,9 @@
     },
   });
 
+  console.time('[perf] app.mount');
+  console.log('[perf] before mount', Math.round(performance.now()) + 'ms');
   app.mount('#app');
+  console.log('[perf] after mount', Math.round(performance.now()) + 'ms');
+  console.timeEnd('[perf] app.mount');
 })();

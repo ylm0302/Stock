@@ -3,7 +3,7 @@ from tradingagents.default_config import DEFAULT_CONFIG
 
 def test_policy_config_keys_present():
     """policy_* 配置项应在 DEFAULT_CONFIG 中存在。"""
-    assert DEFAULT_CONFIG["policy_themes_file"].endswith("policy_themes.yaml")
+    assert DEFAULT_CONFIG["policy_themes_file"].endswith("sector_boards.yaml")
     assert DEFAULT_CONFIG["policy_lookback_days"] == 10
     assert DEFAULT_CONFIG["policy_top_n"] == 10
     assert DEFAULT_CONFIG["policy_deep_analyze_top"] == 3

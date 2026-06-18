@@ -1,21 +1,13 @@
 from tradingagents.policy_screener.models import Candidate
-from tradingagents.policy_screener.themes import ThemeConfig
+from tradingagents.policy_screener.themes import BoardConfig, BoardInfo
 from tradingagents.policy_screener.expander import expand_themes, fetch_board_cons, AShareMarket
 
 
 def _cfg():
-    return ThemeConfig({
-        "新质生产力": {
-            "keywords": ["半导体"],
-            "sectors": ["半导体"],
-            "funds": ["159995"],
-        },
-        "低空经济": {
-            "keywords": ["低空经济"],
-            "sectors": ["低空经济"],
-            "funds": [],
-        },
-    })
+    cfg = BoardConfig()
+    cfg.add_board(BoardInfo("新质生产力", keywords=["半导体"], sectors=["半导体"], funds=["159995"]))
+    cfg.add_board(BoardInfo("低空经济", keywords=["低空经济"], sectors=["低空经济"], funds=[]))
+    return cfg
 
 
 def _fake_cons_fetcher(records):
@@ -56,11 +48,10 @@ def test_expand_attaches_theme_and_sector():
 
 
 def test_expand_dedupes_across_themes():
-    # 同一股票出现在两个主题的板块里，应去重
-    cfg = ThemeConfig({
-        "T1": {"keywords": ["k"], "sectors": ["共享板块"], "funds": []},
-        "T2": {"keywords": ["k"], "sectors": ["共享板块"], "funds": []},
-    })
+    # 同一股票出现在两个板块里，应去重
+    cfg = BoardConfig()
+    cfg.add_board(BoardInfo("T1", keywords=["k"], sectors=["共享板块"], funds=[]))
+    cfg.add_board(BoardInfo("T2", keywords=["k"], sectors=["共享板块"], funds=[]))
     fetcher = _fake_cons_fetcher({"共享板块": [("600584", "长电科技")]})
     cands = expand_themes(cfg, fetcher)
     codes = [c.ticker for c in cands if not c.is_fund]
@@ -68,7 +59,8 @@ def test_expand_dedupes_across_themes():
 
 
 def test_expand_skips_empty_sector():
-    cfg = ThemeConfig({"T": {"keywords": ["k"], "sectors": ["无成分"], "funds": []}})
+    cfg = BoardConfig()
+    cfg.add_board(BoardInfo("T", keywords=["k"], sectors=["无成分"], funds=[]))
     fetcher = _fake_cons_fetcher({})  # 任何板块都返回空
     cands = expand_themes(cfg, fetcher)
     assert cands == []
