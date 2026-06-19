@@ -108,6 +108,22 @@
         profileDirty: false,
         showApiKey: false,
 
+        // 全局设置弹窗
+        showSettings: false,
+        settingsEditName: '',       // 当前正在编辑的方案名
+        settingsShowKey: false,
+        settingsSaveMsg: '',
+        settingsForm: {             // 弹窗内编辑表单
+          name: '',
+          llm_provider: 'deepseek',
+          backend_url: '',
+          api_key: '',
+          shallow_thinker: 'deepseek-chat',
+          deep_thinker: 'deepseek-reasoner',
+          output_language: 'Chinese',
+          research_depth: 1,
+        },
+
         running: false,
         currentJobId: null,
         eventSource: null,
@@ -406,6 +422,202 @@
         });
         if (cur.api_key && !cfg.api_key) dirty = true;
         this.profileDirty = dirty;
+      },
+
+      // ── 全局设置弹窗 ────────────────────────────────────────────
+      openSettings: function (profileName) {
+        this.showSettings = true;
+        this.settingsSaveMsg = '';
+        if (profileName) {
+          this.settingsSelectProfile(profileName);
+        } else if (this.activeProfileName) {
+          this.settingsSelectProfile(this.activeProfileName);
+        } else if (this.profiles.length > 0) {
+          this.settingsSelectProfile(this.profiles[0].name);
+        } else {
+          this.settingsEditName = '';
+        }
+      },
+
+      closeSettings: function () {
+        this.showSettings = false;
+        this.settingsSaveMsg = '';
+      },
+
+      settingsSelectProfile: function (name) {
+        var self = this;
+        self.settingsEditName = name;
+        self.settingsSaveMsg = '';
+        self.settingsShowKey = false;
+        var p = self.profiles.find(function (x) { return x.name === name; });
+        if (!p) return;
+        var cfg = p.config || {};
+        self.settingsForm = {
+          name: p.name,
+          llm_provider: cfg.llm_provider || 'deepseek',
+          backend_url: cfg.backend_url || '',
+          // 脱敏的 key 不回填，让用户重新输入
+          api_key: (cfg.api_key && cfg.api_key.indexOf('•') === -1) ? cfg.api_key : '',
+          shallow_thinker: cfg.shallow_thinker || 'deepseek-chat',
+          deep_thinker: cfg.deep_thinker || 'deepseek-reasoner',
+          output_language: cfg.output_language || 'Chinese',
+          research_depth: cfg.research_depth || 1,
+        };
+      },
+
+      settingsNewProfile: function () {
+        var self = this;
+        var name = prompt('新方案名称:');
+        if (!name || !name.trim()) return;
+        name = name.trim();
+        var exists = self.profiles.some(function (p) { return p.name === name; });
+        if (exists) { alert('方案名已存在'); return; }
+        // 先创建空方案
+        self.settingsEditName = name;
+        self.settingsSaveMsg = '';
+        self.settingsShowKey = false;
+        self.settingsForm = {
+          name: name,
+          llm_provider: 'deepseek',
+          backend_url: '',
+          api_key: '',
+          shallow_thinker: 'deepseek-chat',
+          deep_thinker: 'deepseek-reasoner',
+          output_language: 'Chinese',
+          research_depth: 1,
+        };
+      },
+
+      settingsOnProviderChange: function () {
+        var self = this;
+        var p = self.providers.find(function (x) { return x.value === self.settingsForm.llm_provider; });
+        if (p) {
+          self.settingsForm.shallow_thinker = p.shallow;
+          self.settingsForm.deep_thinker    = p.deep;
+        }
+      },
+
+      _settingsBuildConfig: function () {
+        var f = this.settingsForm;
+        return {
+          llm_provider:    f.llm_provider,
+          backend_url:     f.backend_url,
+          api_key:         f.api_key,
+          shallow_thinker: f.shallow_thinker,
+          deep_thinker:    f.deep_thinker,
+          output_language: f.output_language,
+          research_depth:  f.research_depth,
+          checkpoint:      false,
+          asset_type:      'stock',
+        };
+      },
+
+      settingsSave: function () {
+        var self = this;
+        var saveName = (self.settingsForm.name || '').trim();
+        if (!saveName) { self.settingsSaveMsg = '❌ 方案名不能为空'; return; }
+
+        // 如果方案名被改了，先处理重命名
+        var isRename = saveName !== self.settingsEditName && self.settingsEditName;
+
+        fetch('/api/profiles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: saveName, config: self._settingsBuildConfig() }),
+        })
+          .then(function (r) {
+            if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+            return r.json();
+          })
+          .then(function () {
+            // 如果改了方案名，把旧方案删掉
+            if (isRename) {
+              return fetch('/api/profiles?name=' + encodeURIComponent(self.settingsEditName), {
+                method: 'DELETE',
+              }).then(function () {});
+            }
+          })
+          .then(function () {
+            self.settingsEditName = saveName;
+            self.settingsSaveMsg = '✅ 已保存';
+            self.addLog('方案「' + saveName + '」已保存', 'info');
+            // 如果保存的就是当前激活方案，同步更新 form
+            return self.loadProfiles();
+          })
+          .then(function () {
+            if (self.activeProfileName === saveName) {
+              self.applyProfileToForm();
+            }
+          })
+          .catch(function (e) {
+            self.settingsSaveMsg = '❌ 保存失败：' + e.message;
+          });
+      },
+
+      settingsActivate: function () {
+        var self = this;
+        var name = self.settingsEditName;
+        fetch('/api/profiles/activate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name }),
+        })
+          .then(function (r) {
+            if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+            return r.json();
+          })
+          .then(function () {
+            self.activeProfileName = name;
+            self.applyProfileToForm();
+            self.settingsSaveMsg = '✅ 已切换为当前方案';
+            self.addLog('已切换配置方案：' + name, 'info');
+            return self.loadProfiles();
+          })
+          .catch(function (e) {
+            self.settingsSaveMsg = '❌ 切换失败：' + e.message;
+          });
+      },
+
+      settingsSaveAndActivate: function () {
+        var self = this;
+        // 先保存再激活
+        self.settingsSave();
+        // 等一下再激活（等保存完成）
+        setTimeout(function () {
+          var saveName = (self.settingsForm.name || '').trim();
+          if (saveName) {
+            self.settingsEditName = saveName;
+            self.settingsActivate();
+          }
+        }, 600);
+      },
+
+      settingsDeleteProfile: function () {
+        var self = this;
+        var name = self.settingsEditName;
+        if (!name) return;
+        if (!confirm('确定删除方案「' + name + '」？')) return;
+        fetch('/api/profiles?name=' + encodeURIComponent(name), { method: 'DELETE' })
+          .then(function (r) {
+            if (!r.ok) return r.text().then(function (t) { throw new Error(t); });
+            return r.json();
+          })
+          .then(function (data) {
+            self.settingsEditName = '';
+            self.addLog('已删除方案：' + name, 'info');
+            if (self.activeProfileName === name) {
+              self.activeProfileName = data.active || '';
+              self.applyProfileToForm();
+            }
+            return self.loadProfiles();
+          })
+          .then(function () {
+            // 自动选中第一个
+            if (self.profiles.length > 0 && !self.settingsEditName) {
+              self.settingsSelectProfile(self.profiles[0].name);
+            }
+          })
+          .catch(function (e) { self.settingsSaveMsg = '❌ 删除失败：' + e.message; });
       },
 
       // ── Logging ─────────────────────────────────────────────────

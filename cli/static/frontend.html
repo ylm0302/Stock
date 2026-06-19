@@ -32,10 +32,200 @@
       </div>
     </div>
     <div class="flex items-center gap-4 text-xs text-slate-400">
-      <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full" :class="serverOnline ? 'bg-green-500' : 'bg-red-500'"></span> {{ serverOnline ? '已连接' : '离线' }}</span>
-      <span>结果目录: {{ statusInfo.results_dir || '—' }}</span>
+      <!-- 当前激活配置方案快捷显示 -->
+      <div v-if="activeProfileName" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface border border-slate-700 cursor-pointer hover:border-accent transition"
+        @click="openSettings()">
+        <span class="text-accent text-sm">{{ profileEmoji(activeProfileName) }}</span>
+        <span class="text-white text-xs font-medium max-w-24 truncate">{{ activeProfileName }}</span>
+        <span class="text-slate-600 text-[10px]">{{ activeProfileConfig.llm_provider || '' }}</span>
+        <span v-if="profileDirty" class="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" title="有未保存改动"></span>
+      </div>
+      <span class="flex items-center gap-1">
+        <span class="w-2 h-2 rounded-full" :class="serverOnline ? 'bg-green-500' : 'bg-red-500'"></span>
+        {{ serverOnline ? '已连接' : '离线' }}
+      </span>
+      <!-- 设置按钮 -->
+      <button @click="openSettings()"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface border border-slate-600 hover:border-accent text-slate-300 hover:text-white text-xs font-medium transition">
+        ⚙️ 设置
+      </button>
     </div>
   </header>
+
+  <!-- ═══ 全局设置弹窗 ═══ -->
+  <div v-if="showSettings"
+    class="fixed inset-0 z-50 flex items-center justify-center"
+    style="background:rgba(0,0,0,0.7)">
+    <div class="w-full max-w-3xl mx-4 bg-[#1e293b] border border-slate-700 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+      style="max-height:88vh">
+
+      <!-- 弹窗标题栏 -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-700 shrink-0">
+        <div>
+          <h2 class="text-base font-bold text-white">⚙️ API 配置方案</h2>
+          <p class="text-xs text-slate-500 mt-0.5">管理多套 LLM 配置，切换后全局生效</p>
+        </div>
+        <button @click="closeSettings()" class="text-slate-500 hover:text-white text-xl transition px-2">✕</button>
+      </div>
+
+      <div class="flex flex-1 overflow-hidden">
+
+        <!-- 左侧：方案列表 -->
+        <div class="w-48 shrink-0 border-r border-slate-700 flex flex-col">
+          <div class="p-3 border-b border-slate-700/50">
+            <button @click="settingsNewProfile()"
+              class="w-full py-2 rounded-lg text-xs font-semibold bg-accent hover:bg-accent-dim text-slate-900 transition">
+              ➕ 新建方案
+            </button>
+          </div>
+          <div class="flex-1 overflow-y-auto p-2 space-y-1">
+            <div v-if="profiles.length === 0" class="text-xs text-slate-600 text-center py-8 px-2">
+              还没有配置方案<br>点击「新建方案」开始
+            </div>
+            <button v-for="p in profiles" :key="p.name"
+              @click="settingsSelectProfile(p.name)"
+              class="w-full text-left px-3 py-2.5 rounded-lg text-xs transition flex items-center gap-2 group"
+              :class="settingsEditName === p.name
+                ? 'bg-accent/20 border border-accent/50 text-white'
+                : 'hover:bg-surface-lighter text-slate-400 hover:text-white'">
+              <span class="text-sm">{{ profileEmoji(p.name) }}</span>
+              <div class="flex-1 min-w-0">
+                <div class="font-medium truncate">{{ p.name }}</div>
+                <div class="text-[10px] text-slate-600 truncate">{{ (p.config && p.config.llm_provider) || '—' }}</div>
+              </div>
+              <!-- 当前激活标记 -->
+              <span v-if="p.name === activeProfileName"
+                class="shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-400" title="当前激活"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 右侧：编辑区 -->
+        <div class="flex-1 overflow-y-auto p-6">
+          <!-- 未选中任何方案 -->
+          <div v-if="!settingsEditName" class="flex flex-col items-center justify-center h-full text-slate-600">
+            <span class="text-5xl mb-3">⚙️</span>
+            <p class="text-sm">从左侧选择一个方案进行编辑</p>
+            <p class="text-xs mt-1">或点击「新建方案」创建</p>
+          </div>
+
+          <!-- 编辑表单 -->
+          <div v-else>
+            <div class="flex items-center justify-between mb-5">
+              <div class="flex items-center gap-2">
+                <span class="text-xl">{{ profileEmoji(settingsEditName) }}</span>
+                <input v-model="settingsForm.name" type="text"
+                  class="text-base font-bold text-white bg-transparent border-b border-slate-600 focus:border-accent focus:outline-none px-1 py-0.5 w-48"
+                  placeholder="方案名称" />
+              </div>
+              <div class="flex items-center gap-2">
+                <!-- 激活按钮 -->
+                <button v-if="settingsEditName !== activeProfileName"
+                  @click="settingsActivate()"
+                  class="px-3 py-1.5 rounded-lg text-xs bg-surface-lighter text-emerald-400 hover:bg-emerald-900/30 border border-emerald-700/50 transition">
+                  ✓ 切换为当前
+                </button>
+                <span v-else class="px-3 py-1.5 rounded-lg text-xs bg-emerald-900/30 text-emerald-400 border border-emerald-700/50">
+                  ✓ 当前激活
+                </span>
+                <!-- 删除 -->
+                <button @click="settingsDeleteProfile()"
+                  class="px-3 py-1.5 rounded-lg text-xs bg-surface-lighter text-red-400 hover:bg-red-900/30 border border-red-800/50 transition">
+                  🗑 删除
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+              <!-- LLM Provider -->
+              <div class="col-span-2 sm:col-span-1">
+                <label class="block text-xs text-slate-400 mb-1.5">LLM 提供商</label>
+                <select v-model="settingsForm.llm_provider" @change="settingsOnProviderChange()"
+                  class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none">
+                  <option v-for="p in providers" :value="p.value">{{ p.label }}</option>
+                </select>
+              </div>
+
+              <!-- API Base URL -->
+              <div class="col-span-2 sm:col-span-1">
+                <label class="block text-xs text-slate-400 mb-1.5">API 接入地址（可选）</label>
+                <input v-model="settingsForm.backend_url" type="text" placeholder="https://...（留空使用官方地址）"
+                  class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none" />
+              </div>
+
+              <!-- API Key -->
+              <div class="col-span-2">
+                <label class="block text-xs text-slate-400 mb-1.5">API Key</label>
+                <div class="relative">
+                  <input v-model="settingsForm.api_key" :type="settingsShowKey ? 'text' : 'password'"
+                    placeholder="sk-..."
+                    class="w-full px-3 py-2 pr-10 bg-surface border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none" />
+                  <button @click="settingsShowKey = !settingsShowKey" type="button"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white">
+                    {{ settingsShowKey ? '🙈' : '👁' }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- 快速思考模型 -->
+              <div>
+                <label class="block text-xs text-slate-400 mb-1.5">快速思考模型</label>
+                <input v-model="settingsForm.shallow_thinker" type="text"
+                  class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none" />
+              </div>
+
+              <!-- 深度思考模型 -->
+              <div>
+                <label class="block text-xs text-slate-400 mb-1.5">深度思考模型</label>
+                <input v-model="settingsForm.deep_thinker" type="text"
+                  class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none" />
+              </div>
+
+              <!-- 输出语言 -->
+              <div>
+                <label class="block text-xs text-slate-400 mb-1.5">输出语言</label>
+                <select v-model="settingsForm.output_language"
+                  class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none">
+                  <option value="Chinese">中文</option>
+                  <option value="English">English</option>
+                </select>
+              </div>
+
+              <!-- 研究深度 -->
+              <div>
+                <label class="block text-xs text-slate-400 mb-1.5">研究深度</label>
+                <select v-model.number="settingsForm.research_depth"
+                  class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none">
+                  <option :value="1">Shallow（快速）</option>
+                  <option :value="3">Medium（标准）</option>
+                  <option :value="5">Deep（深度）</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 保存按钮 -->
+            <div class="mt-6 flex items-center gap-3">
+              <button @click="settingsSave()"
+                class="flex-1 py-2.5 rounded-xl font-bold text-sm bg-accent hover:bg-accent-dim text-slate-900 transition shadow-lg shadow-accent/20">
+                💾 保存方案
+              </button>
+              <button v-if="settingsEditName !== activeProfileName"
+                @click="settingsSaveAndActivate()"
+                class="flex-1 py-2.5 rounded-xl font-bold text-sm bg-emerald-700 hover:bg-emerald-600 text-white transition">
+                ✓ 保存并切换
+              </button>
+            </div>
+
+            <!-- 提示 -->
+            <p v-if="settingsSaveMsg" class="mt-3 text-xs text-center"
+              :class="settingsSaveMsg.startsWith('✅') ? 'text-emerald-400' : 'text-red-400'">
+              {{ settingsSaveMsg }}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- ═══ MAIN CONTENT ═══ -->
   <div class="flex flex-1 overflow-hidden">
@@ -62,13 +252,13 @@
         <div class="mb-3 p-3 rounded-lg border border-accent/40 bg-surface/50">
           <div class="flex items-center justify-between mb-2">
             <span class="text-xs font-semibold text-accent">📁 配置方案</span>
-            <span class="text-[10px] text-slate-500">已保存 {{ profiles.length }}</span>
+            <button @click="openSettings()" class="text-[10px] text-slate-500 hover:text-accent transition">⚙️ 管理</button>
           </div>
 
           <div v-if="profiles.length === 0" class="text-center py-2">
-            <button @click="saveAsProfile"
+            <button @click="openSettings()"
               class="text-xs text-accent hover:text-white transition">
-              ➕ 保存当前为新方案
+              ➕ 新建配置方案
             </button>
           </div>
 
@@ -80,24 +270,19 @@
                   {{ profileEmoji(p.name) }} {{ p.name }}
                 </option>
               </select>
-              <button @click="saveProfile" title="保存到当前方案"
-                class="px-2 py-1.5 rounded text-xs font-bold transition"
-                :class="profileDirty ? 'bg-accent text-slate-900 animate-pulse-accent' : 'bg-surface-lighter text-slate-400 hover:text-white'">
-                💾
-              </button>
-              <button @click="saveAsProfile" title="另存为新方案"
-                class="px-2 py-1.5 rounded text-xs bg-surface-lighter text-slate-400 hover:text-white transition">
-                ➕
-              </button>
-              <button @click="deleteProfile" title="删除当前方案"
-                class="px-2 py-1.5 rounded text-xs bg-surface-lighter text-red-400 hover:text-red-300 transition">
-                🗑
+              <button @click="openSettings()" title="管理配置方案"
+                class="px-2 py-1.5 rounded text-xs bg-surface-lighter text-slate-400 hover:text-accent transition">
+                ⚙️
               </button>
             </div>
             <div class="text-[10px] text-slate-500 flex gap-2 flex-wrap">
               <span>🔌 {{ (activeProfileConfig.llm_provider || '—') }}</span>
               <span>🔑 {{ maskedApiKey }}</span>
-              <span>🧠 {{ activeProfileConfig.deep_thinker || '—' }}</span>
+              <span>🧠 {{ activeProfileConfig.shallow_thinker || '—' }}</span>
+            </div>
+            <div v-if="profileDirty" class="mt-1.5 text-[10px] text-accent flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-accent animate-pulse inline-block"></span>
+              配置已修改，<button @click="saveProfile()" class="underline hover:text-white">点击保存</button>
             </div>
           </div>
         </div>
