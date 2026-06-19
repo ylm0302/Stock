@@ -122,3 +122,124 @@ class PolicyScreenerRunner:
         except Exception as e:
             logger.warning("深度分析 %s 失败: %s", scored.ticker, e)
             return None
+
+    # ── 自动热点推荐（核心新增方法） ────────────────────────────────
+
+    def run_auto(
+        self,
+        date: str,
+        deep_analyze: bool = False,
+        progress_cb: Optional[Callable[[str, str], None]] = None,
+    ) -> tuple[str, list]:
+        """根据实时财经新闻自动识别热点，无需用户选板块。
+
+        Args:
+            date: 分析日期（yyyy-mm-dd）。
+            deep_analyze: 是否对 Top 标的跑深度 Agent 分析。
+            progress_cb: 进度回调 (stage: str, message: str)，用于 SSE 推流。
+                         stage 取值：'news'|'hotspot'|'expand'|'score'|'rank'|'report'
+
+        Returns:
+            (markdown_report, hotspots_with_boards)
+        """
+        def emit(stage: str, msg: str):
+            logger.info("[%s] %s", stage, msg)
+            if progress_cb:
+                try:
+                    progress_cb(stage, msg)
+                except Exception:
+                    pass
+
+        cfg = self.config
+
+        # ── Step 1: 拉取财经热点新闻 ──────────────────────────────
+        emit("news", "正在抓取实时财经热点新闻…")
+        news_text = fetch_cn_hotspot_news(limit=40)
+        if news_text:
+            emit("news", f"已获取 {len(news_text.splitlines())} 条新闻")
+        else:
+            emit("news", "新闻抓取失败，将使用内置默认热点板块")
+
+        # ── Step 2: LLM 分析热点 → 提取主题 ─────────────────────
+        emit("hotspot", "LLM 正在分析热点主题，结合国家政策筛选板块…")
+        all_theme_cfg = load_themes(cfg["policy_themes_file"], enabled=[])
+        all_board_names = all_theme_cfg.enabled_board_names()
+
+        hotspots = extract_hotspots_with_llm(news_text, self.llm, all_board_names)
+        matched_boards, hotspots_with_boards = match_boards(hotspots, all_board_names)
+
+        if matched_boards:
+            board_str = "、".join(matched_boards[:8])
+            emit("hotspot", f"识别到 {len(hotspots_with_boards)} 个热点，匹配板块：{board_str}{'…' if len(matched_boards) > 8 else ''}")
+        else:
+            # 完全匹配失败时用全部板块（保底）
+            emit("hotspot", "未能匹配已知板块，将扫描全部板块（可能较慢）")
+            matched_boards = all_board_names[:20]  # 最多取前 20 个避免太慢
+
+        # ── Step 3: 展开候选池 ────────────────────────────────────
+        emit("expand", f"正在展开 {len(matched_boards)} 个热点板块的成分标的…")
+        theme_cfg = load_themes(cfg["policy_themes_file"], enabled=matched_boards)
+        candidates = expand_themes(theme_cfg, cons_fetcher=fetch_board_cons)
+        emit("expand", f"候选标的池共 {len(candidates)} 只")
+
+        if not candidates:
+            emit("expand", "候选池为空，请检查板块配置或 akshare 连接")
+            report = render_hotspot_report([], hotspots_with_boards, news_text[:500], date, {})
+            return report, hotspots_with_boards
+
+        # ── Step 4: 逐标的打分 ───────────────────────────────────
+        emit("score", f"开始对 {len(candidates)} 只标的进行资金面 + LLM 评分…")
+        scored: List[ScoredCandidate] = []
+        for i, cand in enumerate(candidates):
+            ff_score, metrics = self._score_fund_flow(cand, date)
+            llm_score, reason = qualify(cand, self.llm)
+            rel_score = self._relevance_score_hotspot(cand, hotspots_with_boards)
+            scored.append(ScoredCandidate(
+                ticker=cand.ticker, name=cand.name, theme=cand.theme,
+                is_fund=cand.is_fund, sector=cand.sector,
+                relevance_score=rel_score,
+                fund_flow_score=ff_score,
+                llm_qualitative_score=llm_score,
+                composite_score=0.0,
+                metrics=metrics,
+                reason=reason,
+            ))
+            # 每处理 10 只推一次进度
+            if (i + 1) % 10 == 0 or (i + 1) == len(candidates):
+                emit("score", f"已评分 {i + 1}/{len(candidates)} 只")
+
+        # ── Step 5: 排序 ─────────────────────────────────────────
+        emit("rank", "正在按主力介入度 + 政策相关性综合排名…")
+        ranked = rank_candidates(
+            scored, cfg["policy_thresholds"], cfg["policy_weights"], cfg["policy_top_n"],
+        )
+        emit("rank", f"通过筛选：{len(ranked)} 只（股票 {sum(1 for s in ranked if not s.is_fund)} 只 / 基金 {sum(1 for s in ranked if s.is_fund)} 只）")
+
+        # ── Step 6: 深度分析（可选） ──────────────────────────────
+        deep_results: Dict[str, Optional[str]] = {}
+        if deep_analyze and self.graph is not None and ranked:
+            top_k = cfg["policy_deep_analyze_top"]
+            emit("deep", f"对 Top {min(top_k, len(ranked))} 只标的进行深度 Agent 分析…")
+            for s in ranked[:top_k]:
+                emit("deep", f"深度分析 {s.ticker}（{s.name}）…")
+                deep_results[s.ticker] = self._deep_analyze(s, date)
+
+        # ── Step 7: 生成报告 ──────────────────────────────────────
+        emit("report", "正在生成推荐报告…")
+        report = render_hotspot_report(ranked, hotspots_with_boards, news_text[:500], date, deep_results)
+        emit("report", "报告生成完毕 ✅")
+
+        return report, hotspots_with_boards
+
+    def _relevance_score_hotspot(self, cand: Candidate, hotspots_with_boards: list) -> float:
+        """根据热点匹配程度计算政策相关度分（0-100）。
+
+        标的所属 theme 命中多个热点得分更高。
+        """
+        match_count = 0
+        for h in hotspots_with_boards:
+            if cand.theme in h.get("matched_boards", []):
+                match_count += 1
+        if match_count == 0:
+            return 60.0   # 基础分
+        return min(100.0, 70.0 + match_count * 10.0)

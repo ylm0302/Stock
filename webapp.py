@@ -516,6 +516,9 @@ class FrontendHandler(SimpleHTTPRequestHandler):
         if parsed.path == "/api/policy-recommend":
             self.handle_api_policy_recommend()
             return
+        if parsed.path == "/api/hotspot-recommend":
+            self.handle_api_hotspot_recommend()
+            return
         self.send_error(404, "Unknown API endpoint")
 
     # ── GET API routing ──────────────────────────────────────────────────
@@ -888,6 +891,86 @@ class FrontendHandler(SimpleHTTPRequestHandler):
             self.send_json({"categories": categories})
         except Exception as e:
             self.send_json({"error": str(e), "categories": []}, status=500)
+
+    # ── Hotspot Recommend (SSE) ────────────────────────────────────────
+
+    def handle_api_hotspot_recommend(self):
+        """POST /api/hotspot-recommend — 自动拉新闻、识别热点、筛选标的，SSE 实时推进度。"""
+        content_length = int(self.headers.get("Content-Length", 0))
+        raw_body = self.rfile.read(content_length)
+        try:
+            payload = json.loads(raw_body.decode("utf-8"))
+        except Exception:
+            self.send_error(400, "Invalid JSON payload")
+            return
+
+        date           = payload.get("date", "")
+        deep           = payload.get("deep", False)
+        llm_provider   = payload.get("llm_provider") or "deepseek"
+        shallow_thinker = payload.get("shallow_thinker") or ""
+        deep_thinker   = payload.get("deep_thinker") or ""
+        api_key        = payload.get("api_key") or ""
+        backend_url    = payload.get("backend_url") or ""
+
+        # 设置 API Key 环境变量
+        env_var = PROVIDER_API_KEY_ENV.get(llm_provider.lower())
+        if env_var and api_key:
+            os.environ[env_var] = api_key
+
+        config = DEFAULT_CONFIG.copy()
+        config["output_language"] = "Chinese"
+        config["llm_provider"] = llm_provider.lower()
+        if shallow_thinker:
+            config["quick_think_llm"] = shallow_thinker
+        if deep_thinker:
+            config["deep_think_llm"] = deep_thinker
+        if backend_url:
+            config["backend_url"] = backend_url
+
+        # 建立 SSE 响应
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        def _sse(event: str, data: dict):
+            """写一条 SSE 事件到响应流。"""
+            try:
+                msg = f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+                self.wfile.write(msg.encode("utf-8"))
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+        def progress_cb(stage: str, message: str):
+            _sse("progress", {"stage": stage, "message": message})
+
+        try:
+            from tradingagents.policy_screener.runner import PolicyScreenerRunner, build_llm
+
+            llm = build_llm(config)
+            graph = None
+            if deep and llm is not None:
+                from tradingagents.graph.trading_graph import TradingAgentsGraph
+                graph = TradingAgentsGraph(
+                    selected_analysts=["market", "social", "news", "fundamentals"],
+                    debug=True, config=config,
+                )
+
+            runner = PolicyScreenerRunner(config, llm=llm, graph=graph)
+            report, hotspots = runner.run_auto(
+                date=date,
+                deep_analyze=deep,
+                progress_cb=progress_cb,
+            )
+            _sse("done", {"report": report, "hotspots": hotspots})
+
+        except Exception as e:
+            _sse("error", {"message": str(e)})
+        finally:
+            _sse("stream_end", {})
 
     # ── helpers ──────────────────────────────────────────────────────────
 

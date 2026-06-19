@@ -133,11 +133,20 @@
 
         // 政策推荐
         policyCategories: [],           // 分类列表 [{name, boards: [{name, keywords, funds}]}]
-        policySelectedBoards: [],       // 选中的板块名列表
+        policySelectedBoards: [],       // 选中的板块名列表（兼容旧逻辑，热点模式不再使用）
         policyDate: new Date().toISOString().slice(0, 10),
         policyDeep: false,
         policyLoading: false,
         policyReport: '',
+        policyProgressMsg: '',          // 当前进度文字
+        policySteps: [                  // 阶段步骤列表
+          { key: 'news',    label: '抓取财经热点新闻',           active: false, done: false },
+          { key: 'hotspot', label: 'LLM 识别热点板块 + 政策匹配', active: false, done: false },
+          { key: 'expand',  label: '展开板块成分标的',            active: false, done: false },
+          { key: 'score',   label: '资金面 + LLM 评分',          active: false, done: false },
+          { key: 'rank',    label: '综合排序筛选',                active: false, done: false },
+          { key: 'report',  label: '生成推荐报告',                active: false, done: false },
+        ],
       };
     },
 
@@ -776,6 +785,106 @@
             self.policyReport = '## 请求失败\n\n' + e.message;
             self.policyLoading = false;
           });
+      },
+
+      // ── 新：一键热点推荐（SSE 流式） ────────────────────────────
+      startHotspotRecommend: function () {
+        var self = this;
+        if (self.policyLoading) return;
+
+        // 重置状态
+        self.policyLoading = true;
+        self.policyReport = '';
+        self.policyProgressMsg = '准备中…';
+        self.currentView = 'policy';
+        self.policySteps.forEach(function (s) { s.active = false; s.done = false; });
+
+        var STAGE_ORDER = ['news', 'hotspot', 'expand', 'score', 'rank', 'report'];
+
+        function setStage(stage) {
+          // 当前阶段变 active，之前的全部 done
+          self.policySteps.forEach(function (s) {
+            var idx = STAGE_ORDER.indexOf(s.key);
+            var cur = STAGE_ORDER.indexOf(stage);
+            if (idx < cur)      { s.done = true; s.active = false; }
+            else if (idx === cur){ s.done = false; s.active = true; }
+            else                 { s.done = false; s.active = false; }
+          });
+          // 强制 Vue 响应式触发
+          self.policySteps = self.policySteps.slice();
+        }
+
+        var payload = {
+          date: self.policyDate,
+          deep: self.policyDeep,
+          llm_provider: self.form.llm_provider || 'deepseek',
+          backend_url: self.form.backend_url || '',
+          shallow_thinker: (self.form.shallow_thinker || '').trim(),
+          deep_thinker: (self.form.deep_thinker || '').trim(),
+          api_key: self.form.api_key || '',
+        };
+
+        // 用 fetch + ReadableStream 处理 SSE（fetch POST SSE）
+        fetch('/api/hotspot-recommend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }).then(function (response) {
+          if (!response.ok) {
+            return response.text().then(function (t) { throw new Error(t); });
+          }
+          var reader = response.body.getReader();
+          var decoder = new TextDecoder('utf-8');
+          var buf = '';
+
+          function pump() {
+            return reader.read().then(function (result) {
+              if (result.done) {
+                self.policyLoading = false;
+                return;
+              }
+              buf += decoder.decode(result.value, { stream: true });
+              // 按 SSE 协议分割事件块（\n\n 分隔）
+              var parts = buf.split('\n\n');
+              buf = parts.pop(); // 最后一段可能不完整，留到下轮
+              parts.forEach(function (chunk) {
+                var eventMatch = chunk.match(/^event:\s*(\S+)/m);
+                var dataMatch  = chunk.match(/^data:\s*(.*)/ms);
+                var eventName  = eventMatch ? eventMatch[1] : 'message';
+                var dataStr    = dataMatch  ? dataMatch[1].trim() : '';
+                if (!dataStr) return;
+
+                try {
+                  var data = JSON.parse(dataStr);
+                  if (eventName === 'progress') {
+                    setStage(data.stage);
+                    self.policyProgressMsg = data.message || '';
+                    self.addLog('[热点推荐] ' + data.message, 'info');
+                  } else if (eventName === 'done') {
+                    // 全部步骤 done
+                    self.policySteps.forEach(function (s) { s.done = true; s.active = false; });
+                    self.policySteps = self.policySteps.slice();
+                    self.policyReport = data.report || '';
+                    self.policyLoading = false;
+                    self.addLog('热点推荐完成 ✅', 'info');
+                  } else if (eventName === 'error') {
+                    self.policyReport = '## ❌ 推荐失败\n\n' + (data.message || '未知错误');
+                    self.policyLoading = false;
+                    self.addLog('热点推荐失败: ' + (data.message || ''), 'error');
+                  } else if (eventName === 'stream_end') {
+                    self.policyLoading = false;
+                  }
+                } catch (e) { /* 解析失败跳过 */ }
+              });
+              return pump();
+            });
+          }
+          return pump();
+        }).catch(function (e) {
+          self.policyReport = '## ❌ 请求失败\n\n' + e.message;
+          self.policyLoading = false;
+          self.addLog('热点推荐请求失败: ' + e.message, 'error');
+        });
       },
     },
 
