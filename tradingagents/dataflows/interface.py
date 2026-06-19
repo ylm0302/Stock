@@ -28,6 +28,7 @@ from .akshare_news import get_news as get_akshare_news, get_global_news as get_a
 from .akshare_news import AkshareRateLimitError
 from .alpha_vantage_common import AlphaVantageRateLimitError, get_api_key
 from .stockstats_utils import YFRateLimitError
+from .baostock_data import get_stock_data_baostock, get_indicators_baostock
 
 # Configuration and routing logic
 from .config import get_config
@@ -52,7 +53,8 @@ TOOLS_CATEGORIES = {
             "get_fundamentals",
             "get_balance_sheet",
             "get_cashflow",
-            "get_income_statement"
+            "get_income_statement",
+            "get_insider_transactions",
         ]
     },
     "news_data": {
@@ -60,7 +62,6 @@ TOOLS_CATEGORIES = {
         "tools": [
             "get_news",
             "get_global_news",
-            "get_insider_transactions",
         ]
     }
 }
@@ -78,11 +79,13 @@ VENDOR_METHODS = {
     "get_stock_data": {
         "alpha_vantage": get_alpha_vantage_stock,
         "yfinance": get_YFin_data_online,
+        "baostock": get_stock_data_baostock,
     },
     # technical_indicators
     "get_indicators": {
         "alpha_vantage": get_alpha_vantage_indicator,
         "yfinance": get_stock_stats_indicators_window,
+        "baostock": get_indicators_baostock,
     },
     # fundamental_data
     "get_fundamentals": {
@@ -143,31 +146,40 @@ def get_vendor(category: str, method: str = None) -> str:
     return config.get("data_vendors", {}).get(category, "default")
 
 def route_to_vendor(method: str, *args, **kwargs):
-    """Route method calls to appropriate vendor implementation with fallback support."""
+    """Route method calls to appropriate vendor implementation with fallback support.
+
+    Fallback 只在限速/不可用类异常时触发（AlphaVantageRateLimitError、
+    YFRateLimitError、FinnhubRateLimitError、AkshareRateLimitError）。
+    非限速错误（如 API Key 缺失）直接抛出，不 fallback 到其他 vendor。
+    Fallback 链只包含配置指定的 vendor，不自动追加未配置的 vendor。
+    """
     category = get_category_for_method(method)
     vendor_config = get_vendor(category, method)
-    primary_vendors = [v.strip() for v in vendor_config.split(',')]
+    vendors = [v.strip() for v in vendor_config.split(',')]
 
     if method not in VENDOR_METHODS:
         raise ValueError(f"Method '{method}' not supported")
 
-    # Build fallback chain: primary vendors first, then remaining available vendors
-    all_available_vendors = list(VENDOR_METHODS[method].keys())
-    fallback_vendors = primary_vendors.copy()
-    for vendor in all_available_vendors:
-        if vendor not in fallback_vendors:
-            fallback_vendors.append(vendor)
+    available = VENDOR_METHODS[method]
+    last_error = None
 
-    for vendor in fallback_vendors:
-        if vendor not in VENDOR_METHODS[method]:
+    for vendor in vendors:
+        if vendor not in available:
             continue
-
-        vendor_impl = VENDOR_METHODS[method][vendor]
+        vendor_impl = available[vendor]
         impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
-
         try:
             return impl_func(*args, **kwargs)
-        except (AlphaVantageRateLimitError, YFRateLimitError, FinnhubRateLimitError, AkshareRateLimitError):
-            continue  # Only rate limits trigger fallback
+        except (AlphaVantageRateLimitError, YFRateLimitError,
+                FinnhubRateLimitError, AkshareRateLimitError) as e:
+            last_error = e
+            continue  # 限速/不可用 → 尝试下一个 vendor
 
-    raise RuntimeError(f"No available vendor for '{method}'")
+    if last_error:
+        raise RuntimeError(
+            f"所有配置的 vendor {vendors} 均不可用（method={method}）: {last_error}"
+        )
+    raise RuntimeError(
+        f"配置的 vendor {vendors} 中没有支持 '{method}' 的实现，"
+        f"可用 vendor: {list(available.keys())}"
+    )
