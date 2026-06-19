@@ -317,64 +317,10 @@
             </select>
           </div>
 
-          <!-- LLM Provider -->
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">LLM 提供商</label>
-            <select v-model="form.llm_provider" @change="onProviderChange(); checkProfileDirty()"
-              class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none transition">
-              <option v-for="p in providers" :value="p.value">{{ p.label }}</option>
-            </select>
-          </div>
-
-          <!-- Backend URL -->
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">API 接入地址</label>
-            <input v-model="form.backend_url" @input="checkProfileDirty" type="text" placeholder="https://..."
-              class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none transition" />
-          </div>
-
-          <!-- API Key -->
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">API Key</label>
-            <div class="relative">
-              <input v-model="form.api_key" @input="checkProfileDirty" :type="showApiKey ? 'text' : 'password'" placeholder="sk-..."
-                class="w-full px-3 py-2 pr-9 bg-surface border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none transition" />
-              <button @click="showApiKey = !showApiKey" type="button"
-                class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-sm"
-                tabindex="-1">
-                {{ showApiKey ? '🙈' : '👁' }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Shallow Model -->
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">快速思考模型</label>
-            <input v-model="form.shallow_thinker" @input="checkProfileDirty" type="text"
-              class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none transition" />
-          </div>
-
-          <!-- Deep Model -->
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">深度思考模型</label>
-            <input v-model="form.deep_thinker" @input="checkProfileDirty" type="text"
-              class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white placeholder-slate-500 focus:border-accent focus:outline-none transition" />
-          </div>
-
-          <!-- Language -->
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">输出语言</label>
-            <select v-model="form.output_language" @change="checkProfileDirty"
-              class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none transition">
-              <option value="Chinese">中文 Chinese</option>
-              <option value="English">English</option>
-            </select>
-          </div>
-
           <!-- Research Depth -->
           <div>
             <label class="block text-xs text-slate-400 mb-1">研究深度</label>
-            <select v-model.number="form.research_depth" @change="checkProfileDirty"
+            <select v-model.number="form.research_depth"
               class="w-full px-3 py-2 bg-surface border border-slate-600 rounded-lg text-sm text-white focus:border-accent focus:outline-none transition">
               <option :value="1">Shallow (快速)</option>
               <option :value="3">Medium (标准)</option>
@@ -384,9 +330,25 @@
 
           <!-- Checkpoint -->
           <label class="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-            <input v-model="form.checkpoint" @change="checkProfileDirty" type="checkbox" class="rounded bg-surface border-slate-600" />
+            <input v-model="form.checkpoint" type="checkbox" class="rounded bg-surface border-slate-600" />
             启用断点续传
           </label>
+
+          <!-- 当前 LLM 配置摘要（只读） -->
+          <div class="p-2.5 rounded-lg bg-surface border border-slate-700 text-[11px] text-slate-500 space-y-1">
+            <div class="flex items-center justify-between">
+              <span>当前 LLM 配置</span>
+              <button @click="openSettings()" class="text-accent hover:text-white transition">⚙️ 修改</button>
+            </div>
+            <div v-if="activeProfileName" class="flex flex-wrap gap-x-3 gap-y-0.5 text-slate-400">
+              <span>🔌 {{ activeProfileConfig.llm_provider || '—' }}</span>
+              <span>🧠 {{ activeProfileConfig.shallow_thinker || '—' }}</span>
+              <span>🔑 {{ maskedApiKey }}</span>
+            </div>
+            <div v-else class="text-yellow-500">
+              ⚠️ 未配置，请先在右上角 ⚙️ 设置中创建方案
+            </div>
+          </div>
         </div>
 
         <!-- Run Button -->

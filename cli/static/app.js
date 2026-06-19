@@ -909,6 +909,14 @@
           self.addLog('请选择分析日期', 'warn');
           return;
         }
+        if (!self.activeProfileName) {
+          self.addLog('请先在右上角 ⚙️ 设置中创建并激活一个配置方案', 'warn');
+          self.openSettings();
+          return;
+        }
+
+        // LLM 配置从激活的方案读取
+        var cfg = self.activeProfileConfig;
 
         // Reset state
         self.running = true;
@@ -916,21 +924,21 @@
         self.activeTab = 'market_report';
         self.initAgents();
         self.chartData = null;
-        self.addLog('开始分析 ' + self.form.ticker.trim().toUpperCase() + ' (' + self.form.analysis_date + ')');
+        self.addLog('开始分析 ' + self.form.ticker.trim().toUpperCase() + ' (' + self.form.analysis_date + ')  [方案: ' + self.activeProfileName + ']');
 
         var payload = {
           ticker: self.form.ticker.trim().toUpperCase(),
           analysis_date: self.form.analysis_date,
           asset_type: self.form.asset_type || 'stock',
           selected_analysts: ['market', 'social', 'news', 'fundamentals'],
-          llm_provider: self.form.llm_provider || 'deepseek',
-          backend_url: self.form.backend_url || '',
-          shallow_thinker: (self.form.shallow_thinker || '').trim(),
-          deep_thinker: (self.form.deep_thinker || '').trim(),
-          output_language: self.form.output_language || 'Chinese',
-          research_depth: self.form.research_depth || 1,
+          llm_provider: cfg.llm_provider || 'deepseek',
+          backend_url: cfg.backend_url || '',
+          shallow_thinker: (cfg.shallow_thinker || '').trim(),
+          deep_thinker: (cfg.deep_thinker || '').trim(),
+          output_language: cfg.output_language || 'Chinese',
+          research_depth: self.form.research_depth || cfg.research_depth || 1,
           checkpoint: !!self.form.checkpoint,
-          profile: self.activeProfileName || null,
+          profile: self.activeProfileName,
         };
 
         fetch('/api/run', {
@@ -995,11 +1003,11 @@
           themes: self.policySelectedBoards.join(','),
           date: self.policyDate,
           deep: self.policyDeep,
-          llm_provider: self.form.llm_provider || 'deepseek',
-          backend_url: self.form.backend_url || '',
-          shallow_thinker: (self.form.shallow_thinker || '').trim(),
-          deep_thinker: (self.form.deep_thinker || '').trim(),
-          api_key: self.form.api_key || '',
+          llm_provider: self.activeProfileConfig.llm_provider || 'deepseek',
+          backend_url: self.activeProfileConfig.backend_url || '',
+          shallow_thinker: (self.activeProfileConfig.shallow_thinker || '').trim(),
+          deep_thinker: (self.activeProfileConfig.deep_thinker || '').trim(),
+          api_key: self.activeProfileConfig.api_key || '',
         };
 
         fetch('/api/policy-recommend', {
@@ -1048,11 +1056,11 @@
           date: self.policyDate,
           deep: self.policyDeep,
           max_price: self.policyMaxPrice || null,
-          llm_provider: self.form.llm_provider || 'deepseek',
-          backend_url: self.form.backend_url || '',
-          shallow_thinker: (self.form.shallow_thinker || '').trim(),
-          deep_thinker: (self.form.deep_thinker || '').trim(),
-          api_key: self.form.api_key || '',
+          llm_provider: self.activeProfileConfig.llm_provider || 'deepseek',
+          backend_url: self.activeProfileConfig.backend_url || '',
+          shallow_thinker: (self.activeProfileConfig.shallow_thinker || '').trim(),
+          deep_thinker: (self.activeProfileConfig.deep_thinker || '').trim(),
+          api_key: self.activeProfileConfig.api_key || '',
         };
 
         // 用 fetch + ReadableStream 处理 SSE（fetch POST SSE）
