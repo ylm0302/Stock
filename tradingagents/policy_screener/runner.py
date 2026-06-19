@@ -12,7 +12,7 @@ from typing import Callable, Dict, List, Optional
 from .expander import expand_themes, fetch_board_cons
 # 从子模块引用 fetch_metrics / qualify，便于测试 monkeypatch 替换
 from .fund_flow_scorer import fetch_metrics, score_metrics
-from .llm_qualifier import qualify
+from .llm_qualifier import debate_and_verdict, qualify
 from .models import Candidate, ScoredCandidate
 from .news_hotspot import extract_hotspots_with_llm, fetch_cn_hotspot_news, match_boards
 from .ranker import rank_candidates
@@ -203,6 +203,7 @@ class PolicyScreenerRunner:
                 composite_score=0.0,
                 metrics=metrics,
                 reason=reason,
+                current_price=metrics.get("current_price"),
             ))
             # 每处理 10 只推一次进度
             if (i + 1) % 10 == 0 or (i + 1) == len(candidates):
@@ -210,12 +211,29 @@ class PolicyScreenerRunner:
 
         # ── Step 5: 排序 ─────────────────────────────────────────
         emit("rank", "正在按主力介入度 + 政策相关性综合排名…")
+        max_price = cfg.get("policy_max_price")
         ranked = rank_candidates(
             scored, cfg["policy_thresholds"], cfg["policy_weights"], cfg["policy_top_n"],
+            max_price=max_price,
         )
-        emit("rank", f"通过筛选：{len(ranked)} 只（股票 {sum(1 for s in ranked if not s.is_fund)} 只 / 基金 {sum(1 for s in ranked if s.is_fund)} 只）")
+        price_note = f"（价格 ≤ {max_price} 元）" if max_price else ""
+        emit("rank", f"通过筛选{price_note}：{len(ranked)} 只（股票 {sum(1 for s in ranked if not s.is_fund)} 只 / 基金 {sum(1 for s in ranked if s.is_fund)} 只）")
 
-        # ── Step 6: 深度分析（可选） ──────────────────────────────
+        # ── Step 6: 多空辩论 + 买入星级 ──────────────────────────
+        if ranked:
+            emit("debate", f"LLM 对 {len(ranked)} 只标的进行多空辩论，评定买入意愿星级…")
+            for i, s in enumerate(ranked):
+                price = s.metrics.get("current_price")
+                bull, bear, verdict, stars = debate_and_verdict(s, self.llm, price=price)
+                s.debate_bull = bull
+                s.debate_bear = bear
+                s.buy_verdict = verdict
+                s.buy_willing_stars = stars
+                s.current_price = price
+                if (i + 1) % 3 == 0 or (i + 1) == len(ranked):
+                    emit("debate", f"辩论完成 {i + 1}/{len(ranked)} 只")
+
+        # ── Step 7: 深度分析（可选） ──────────────────────────────
         deep_results: Dict[str, Optional[str]] = {}
         if deep_analyze and self.graph is not None and ranked:
             top_k = cfg["policy_deep_analyze_top"]
@@ -224,7 +242,7 @@ class PolicyScreenerRunner:
                 emit("deep", f"深度分析 {s.ticker}（{s.name}）…")
                 deep_results[s.ticker] = self._deep_analyze(s, date)
 
-        # ── Step 7: 生成报告 ──────────────────────────────────────
+        # ── Step 8: 生成报告 ──────────────────────────────────────
         emit("report", "正在生成推荐报告…")
         report = render_hotspot_report(ranked, hotspots_with_boards, news_text[:500], date, deep_results)
         emit("report", "报告生成完毕 ✅")

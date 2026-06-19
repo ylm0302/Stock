@@ -20,6 +20,7 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_POLICY_LOOKBACK_DAYS":   "policy_lookback_days",
     "TRADINGAGENTS_POLICY_TOP_N":           "policy_top_n",
     "TRADINGAGENTS_POLICY_DEEP_ANALYZE_TOP": "policy_deep_analyze_top",
+    "TRADINGAGENTS_POLICY_MAX_PRICE":       "policy_max_price",
 }
 
 
@@ -146,4 +147,7 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "fund_flow": 0.45,                 # 资金面量化
         "llm_qualitative": 0.25,           # LLM 定性
     },
+    # 价格上限（元）：None 表示不过滤，普通投资者建议 50 元以下
+    # 可通过 TRADINGAGENTS_POLICY_MAX_PRICE 环境变量覆盖
+    "policy_max_price": None,
 })

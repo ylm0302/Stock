@@ -136,16 +136,18 @@
         policySelectedBoards: [],       // 选中的板块名列表（兼容旧逻辑，热点模式不再使用）
         policyDate: new Date().toISOString().slice(0, 10),
         policyDeep: false,
+        policyMaxPrice: 50,             // 价格上限（元），null = 不限
         policyLoading: false,
         policyReport: '',
         policyProgressMsg: '',          // 当前进度文字
         policySteps: [                  // 阶段步骤列表
-          { key: 'news',    label: '抓取财经热点新闻',           active: false, done: false },
-          { key: 'hotspot', label: 'LLM 识别热点板块 + 政策匹配', active: false, done: false },
-          { key: 'expand',  label: '展开板块成分标的',            active: false, done: false },
-          { key: 'score',   label: '资金面 + LLM 评分',          active: false, done: false },
-          { key: 'rank',    label: '综合排序筛选',                active: false, done: false },
-          { key: 'report',  label: '生成推荐报告',                active: false, done: false },
+          { key: 'news',    label: '抓取财经热点新闻',               active: false, done: false },
+          { key: 'hotspot', label: 'LLM 识别热点板块 + 政策匹配',     active: false, done: false },
+          { key: 'expand',  label: '展开板块成分标的',                active: false, done: false },
+          { key: 'score',   label: '资金面 + LLM 评分',              active: false, done: false },
+          { key: 'rank',    label: '价格筛选 + 综合排序',             active: false, done: false },
+          { key: 'debate',  label: 'LLM 多空辩论 + 买入星级',         active: false, done: false },
+          { key: 'report',  label: '生成推荐报告',                    active: false, done: false },
         ],
       };
     },
@@ -799,24 +801,24 @@
         self.currentView = 'policy';
         self.policySteps.forEach(function (s) { s.active = false; s.done = false; });
 
-        var STAGE_ORDER = ['news', 'hotspot', 'expand', 'score', 'rank', 'report'];
+        var STAGE_ORDER = ['news', 'hotspot', 'expand', 'score', 'rank', 'debate', 'report'];
 
         function setStage(stage) {
           // 当前阶段变 active，之前的全部 done
           self.policySteps.forEach(function (s) {
             var idx = STAGE_ORDER.indexOf(s.key);
             var cur = STAGE_ORDER.indexOf(stage);
-            if (idx < cur)      { s.done = true; s.active = false; }
-            else if (idx === cur){ s.done = false; s.active = true; }
-            else                 { s.done = false; s.active = false; }
+            if (idx < cur)       { s.done = true;  s.active = false; }
+            else if (idx === cur) { s.done = false; s.active = true;  }
+            else                  { s.done = false; s.active = false; }
           });
-          // 强制 Vue 响应式触发
           self.policySteps = self.policySteps.slice();
         }
 
         var payload = {
           date: self.policyDate,
           deep: self.policyDeep,
+          max_price: self.policyMaxPrice || null,
           llm_provider: self.form.llm_provider || 'deepseek',
           backend_url: self.form.backend_url || '',
           shallow_thinker: (self.form.shallow_thinker || '').trim(),

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
+from typing import Optional
 
 import pandas as pd
 
@@ -84,6 +85,18 @@ def passes_threshold(metrics: FundFlowMetrics, thresholds: dict) -> bool:
     return all(checks)
 
 
+def passes_price_filter(metrics: FundFlowMetrics, max_price: Optional[float]) -> bool:
+    """价格筛选：current_price ≤ max_price。
+
+    若 max_price 为 None 或 0 则不筛选；价格未获取时放行（不因缺失而淘汰）。
+    """
+    if not max_price or max_price <= 0:
+        return True
+    if metrics.current_price is None:
+        return True   # 价格未知，放行
+    return metrics.current_price <= max_price
+
+
 # ── 工具函数 ─────────────────────────────────────────────────────
 
 def _strip_suffix(ticker: str) -> str:
@@ -146,6 +159,7 @@ def _fetch_via_baostock(ticker: str, end_date: str, lookback: int) -> FundFlowMe
 
     gain = None
     turnover = None
+    current_price = None
     errors = []
 
     try:
@@ -166,6 +180,8 @@ def _fetch_via_baostock(ticker: str, end_date: str, lookback: int) -> FundFlowMe
             df = df.tail(lookback)
 
             closes = pd.to_numeric(df["close"], errors="coerce").dropna()
+            if len(closes) >= 1:
+                current_price = float(closes.iloc[-1])
             if len(closes) >= 2:
                 gain = float((closes.iloc[-1] - closes.iloc[0]) / closes.iloc[0])
 
@@ -182,6 +198,7 @@ def _fetch_via_baostock(ticker: str, end_date: str, lookback: int) -> FundFlowMe
         ticker=ticker,
         price_gain_ratio=gain,
         turnover_rate=turnover,
+        current_price=current_price,
         is_fund=False,
         data_source="baostock",
         fetch_error="; ".join(errors) if errors else None,
@@ -217,6 +234,7 @@ def _fetch_stock_metrics(ticker: str, end_date: str, lookback: int) -> FundFlowM
     north = None
     gain = None
     turnover = None
+    current_price = None
     ak_errors = []
     use_baostock = False
 
@@ -235,7 +253,7 @@ def _fetch_stock_metrics(ticker: str, end_date: str, lookback: int) -> FundFlowM
         except Exception as e:
             ak_errors.append(f"fund_flow:{e}")
 
-        # 2) 个股日线（涨幅、换手率）
+        # 2) 个股日线（涨幅、换手率、最新价格）
         try:
             int_end = end_date.replace("-", "")
             df = ak.stock_zh_a_hist(symbol=code, period="daily",
@@ -245,6 +263,8 @@ def _fetch_stock_metrics(ticker: str, end_date: str, lookback: int) -> FundFlowM
             if df is not None and not df.empty and "收盘" in df.columns:
                 recent = df.tail(lookback)
                 closes = pd.to_numeric(recent["收盘"], errors="coerce").dropna()
+                if len(closes) >= 1:
+                    current_price = float(closes.iloc[-1])  # 最新收盘价
                 if len(closes) >= 2:
                     gain = float((closes.iloc[-1] - closes.iloc[0]) / closes.iloc[0])
                 if "换手率" in recent.columns:
@@ -282,6 +302,8 @@ def _fetch_stock_metrics(ticker: str, end_date: str, lookback: int) -> FundFlowM
                 turnover = bs_m.turnover_rate
             if bs_m.fetch_error:
                 ak_errors.append(bs_m.fetch_error)
+            # baostock 同时提供最新价
+            current_price = bs_m.current_price
         else:
             ak_errors.append("baostock:unavailable")
 
@@ -293,6 +315,7 @@ def _fetch_stock_metrics(ticker: str, end_date: str, lookback: int) -> FundFlowM
         price_gain_ratio=gain,
         turnover_rate=turnover,
         is_fund=False,
+        current_price=current_price,
         fetch_error=all_errors,
     )
 
@@ -301,6 +324,7 @@ def _fetch_fund_metrics(ticker: str, end_date: str, lookback: int) -> FundFlowMe
     code = _strip_suffix(ticker)
     gain = None
     turnover = None
+    current_price = None
     ak_errors = []
     use_baostock = False
 
@@ -311,6 +335,8 @@ def _fetch_fund_metrics(ticker: str, end_date: str, lookback: int) -> FundFlowMe
         if df is not None and not df.empty and "收盘" in df.columns:
             recent = df.tail(lookback)
             closes = pd.to_numeric(recent["收盘"], errors="coerce").dropna()
+            if len(closes) >= 1:
+                current_price = float(closes.iloc[-1])
             if len(closes) >= 2:
                 gain = float((closes.iloc[-1] - closes.iloc[0]) / closes.iloc[0])
             if "换手率" in recent.columns:
@@ -333,6 +359,8 @@ def _fetch_fund_metrics(ticker: str, end_date: str, lookback: int) -> FundFlowMe
                 gain = bs_m.price_gain_ratio
             if turnover is None:
                 turnover = bs_m.turnover_rate
+            if current_price is None:
+                current_price = bs_m.current_price
             if bs_m.fetch_error:
                 ak_errors.append(bs_m.fetch_error)
         else:
@@ -342,6 +370,7 @@ def _fetch_fund_metrics(ticker: str, end_date: str, lookback: int) -> FundFlowMe
         ticker=ticker,
         price_gain_ratio=gain,
         turnover_rate=turnover,
+        current_price=current_price,
         is_fund=True,
         fetch_error="; ".join(ak_errors) if ak_errors else None,
     )

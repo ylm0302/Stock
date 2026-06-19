@@ -911,6 +911,8 @@ class FrontendHandler(SimpleHTTPRequestHandler):
         deep_thinker   = payload.get("deep_thinker") or ""
         api_key        = payload.get("api_key") or ""
         backend_url    = payload.get("backend_url") or ""
+        max_price_raw  = payload.get("max_price")
+        max_price      = float(max_price_raw) if max_price_raw else None
 
         # 设置 API Key 环境变量
         env_var = PROVIDER_API_KEY_ENV.get(llm_provider.lower())
@@ -926,6 +928,8 @@ class FrontendHandler(SimpleHTTPRequestHandler):
             config["deep_think_llm"] = deep_thinker
         if backend_url:
             config["backend_url"] = backend_url
+        if max_price:
+            config["policy_max_price"] = max_price
 
         # 建立 SSE 响应
         self.send_response(200)
