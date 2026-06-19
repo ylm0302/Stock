@@ -18,12 +18,14 @@ import yaml
 class BoardInfo:
     """单个板块/主题的配置。"""
 
-    def __init__(self, name: str, keywords: List[str], sectors: List[str], funds: List[str], category: str = ""):
+    def __init__(self, name: str, keywords: List[str], sectors: List[str], funds: List[str],
+                 category: str = "", stocks: List = None):
         self.name = name          # 板块名（如 "半导体"）
         self.keywords = keywords  # 模糊匹配关键词
         self.sectors = sectors    # 对应的东财板块名列表（至少含 name 自身）
         self.funds = funds        # 关联 ETF/基金代码
         self.category = category  # 所属大类（如 "科技/半导体/通信"），旧格式为空
+        self.stocks = stocks or []  # 静态内嵌的龙头股列表（{code, name} 或 纯6位代码）
 
 
 class BoardConfig:
@@ -110,6 +112,7 @@ def _load_categories_format(data: dict, enabled: List[str]) -> BoardConfig:
                 keywords=list(board.get("keywords", [])),
                 sectors=[board_name],  # sectors 默认 = 板块名自身
                 funds=list(board.get("funds", [])),
+                stocks=list(board.get("stocks", [])),
                 category=cat_name,
             )
             config.add_board(info)

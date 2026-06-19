@@ -131,7 +131,30 @@ def expand_themes(config, cons_fetcher: ConsFetcher = fetch_board_cons) -> List[
             funds = board.funds
             keywords = board.keywords
 
-        # 股票：板块成分
+        # 股票（静态内嵌）：优先读取 YAML 里的 stocks 字段
+        static_stocks = []
+        if board is not None and hasattr(board, 'stocks'):
+            static_stocks = board.stocks or []
+        for entry in static_stocks:
+            # 支持纯6位代码字符串 或 {code, name} 字典
+            if isinstance(entry, dict):
+                code = str(entry.get("code", "")).strip()
+                name = str(entry.get("name", f"股票{entry.get('code','')}")).strip()
+            else:
+                code = str(entry).strip()
+                name = f"股票{code}"
+            if not code:
+                continue
+            ticker = f"{code}{AShareMarket.suffix_for(code)}"
+            if ticker in seen:
+                continue
+            seen.add(ticker)
+            candidates.append(Candidate(
+                ticker=ticker, name=name, theme=board_name,
+                is_fund=False, sector=sectors[0] if sectors else board_name,
+            ))
+
+        # 股票（动态）：从 akshare 拉板块成分（若 akshare 不可用则跳过）
         for sector in sectors:
             for code, name in cons_fetcher(sector):
                 ticker = f"{code}{AShareMarket.suffix_for(code)}"
