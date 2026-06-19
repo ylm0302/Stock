@@ -154,36 +154,45 @@ class PolicyScreenerRunner:
 
         # ── Step 1: 拉取财经热点新闻 ──────────────────────────────
         emit("news", "正在抓取实时财经热点新闻…")
-        news_text = fetch_cn_hotspot_news(limit=40)
+        news_text, news_source = fetch_cn_hotspot_news(limit=30)
         if news_text:
-            emit("news", f"已获取 {len(news_text.splitlines())} 条新闻")
+            # 统计实际新闻条数（以"- "开头的行）
+            news_count = sum(1 for line in news_text.splitlines() if line.startswith("- "))
+            emit("news", f"新闻获取成功：{news_source}，有效条目 {news_count} 条")
         else:
-            emit("news", "新闻抓取失败，将使用内置默认热点板块")
+            emit("news", f"⚠️ {news_source}")
 
         # ── Step 2: LLM 分析热点 → 提取主题 ─────────────────────
         emit("hotspot", "LLM 正在分析热点主题，结合国家政策筛选板块…")
         all_theme_cfg = load_themes(cfg["policy_themes_file"], enabled=[])
         all_board_names = all_theme_cfg.enabled_board_names()
+        emit("hotspot", f"板块库共 {len(all_board_names)} 个板块可供匹配")
 
-        hotspots = extract_hotspots_with_llm(news_text, self.llm, all_board_names)
+        hotspots, hotspot_msg = extract_hotspots_with_llm(news_text, self.llm, all_board_names)
+        emit("hotspot", hotspot_msg)
+
         matched_boards, hotspots_with_boards = match_boards(hotspots, all_board_names)
 
         if matched_boards:
-            board_str = "、".join(matched_boards[:8])
-            emit("hotspot", f"识别到 {len(hotspots_with_boards)} 个热点，匹配板块：{board_str}{'…' if len(matched_boards) > 8 else ''}")
+            board_str = "、".join(matched_boards)
+            emit("hotspot", f"最终匹配到 {len(matched_boards)} 个板块：{board_str}")
         else:
-            # 完全匹配失败时用全部板块（保底）
-            emit("hotspot", "未能匹配已知板块，将扫描全部板块（可能较慢）")
-            matched_boards = all_board_names[:20]  # 最多取前 20 个避免太慢
+            # 无法匹配任何板块，直接终止，不用保底
+            emit("hotspot", "❌ 未匹配到任何板块，无法继续。请检查 LLM 配置或网络连接。")
+            report = render_hotspot_report([], [], news_text[:500], date, {})
+            return report, []
 
         # ── Step 3: 展开候选池 ────────────────────────────────────
-        emit("expand", f"正在展开 {len(matched_boards)} 个热点板块的成分标的…")
+        emit("expand", f"正在从 akshare 拉取 {len(matched_boards)} 个板块的成分股…")
         theme_cfg = load_themes(cfg["policy_themes_file"], enabled=matched_boards)
         candidates = expand_themes(theme_cfg, cons_fetcher=fetch_board_cons)
-        emit("expand", f"候选标的池共 {len(candidates)} 只")
+
+        stocks_cnt = sum(1 for c in candidates if not c.is_fund)
+        funds_cnt  = sum(1 for c in candidates if c.is_fund)
+        emit("expand", f"展开完成：股票 {stocks_cnt} 只 / 基金/ETF {funds_cnt} 只，共 {len(candidates)} 只")
 
         if not candidates:
-            emit("expand", "候选池为空，请检查板块配置或 akshare 连接")
+            emit("expand", "❌ 候选池为空 — akshare 板块成分接口不可用且 YAML 无预置股票。请检查网络代理设置。")
             report = render_hotspot_report([], hotspots_with_boards, news_text[:500], date, {})
             return report, hotspots_with_boards
 

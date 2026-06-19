@@ -429,14 +429,54 @@
   <!-- ═══ BOTTOM: LOG STREAM ═══ -->
   <footer class="shrink-0 bg-surface-light border-t border-slate-700">
     <div class="flex items-center justify-between px-4 py-1.5 border-b border-slate-700/50">
-      <h2 class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">📜 实时日志</h2>
-      <button @click="clearLogs()" class="text-[10px] text-slate-500 hover:text-white transition">清除</button>
+      <div class="flex items-center gap-3">
+        <h2 class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">📜 实时日志</h2>
+        <span class="text-[10px] text-slate-600">{{ logs.length }} 条</span>
+        <!-- 展开/收缩按钮 -->
+        <button @click="logExpanded = !logExpanded"
+          class="text-[10px] text-slate-500 hover:text-accent transition px-1.5 py-0.5 rounded border border-slate-700 hover:border-accent">
+          {{ logExpanded ? '▼ 收起' : '▲ 展开' }}
+        </button>
+      </div>
+      <div class="flex items-center gap-2">
+        <!-- 日志等级过滤 -->
+        <select v-model="logFilter"
+          class="text-[10px] bg-surface border border-slate-700 text-slate-400 rounded px-1.5 py-0.5 focus:outline-none focus:border-accent">
+          <option value="all">全部</option>
+          <option value="info">Info</option>
+          <option value="warn">警告</option>
+          <option value="error">错误</option>
+        </select>
+        <button @click="clearLogs()" class="text-[10px] text-slate-500 hover:text-red-400 transition">清除</button>
+      </div>
     </div>
-    <div ref="logContainer" class="h-28 overflow-y-auto p-2 font-mono text-[11px] leading-relaxed">
-      <div v-if="logs.length === 0" class="text-slate-600 px-2">等待事件...</div>
-      <div v-for="(log, i) in logs" :key="i" class="px-2 py-0.5 text-slate-400 hover:bg-surface-lighter/50 rounded transition">
-        <span class="text-slate-600 mr-2">{{ log.time }}</span>
-        <span :class="logLevelClass(log.level)">{{ log.message }}</span>
+    <!-- 日志内容区，高度可展开 -->
+    <div ref="logContainer"
+      class="overflow-y-auto p-2 font-mono text-[11px] leading-relaxed transition-all duration-300"
+      :style="{ height: logExpanded ? '260px' : '112px' }">
+      <div v-if="filteredLogs.length === 0" class="text-slate-600 px-2 py-1">
+        {{ logs.length === 0 ? '等待事件...' : '当前过滤条件无匹配日志' }}
+      </div>
+      <div v-for="(log, i) in filteredLogs" :key="i"
+        class="px-2 py-0.5 rounded flex items-start gap-2 group hover:bg-surface-lighter/40 transition">
+        <!-- 时间戳 -->
+        <span class="text-slate-600 shrink-0 pt-0.5">{{ log.time }}</span>
+        <!-- 等级徽标 -->
+        <span class="shrink-0 pt-0.5 w-8 text-center rounded text-[9px] font-bold uppercase leading-tight"
+          :class="{
+            'text-slate-500': log.level === 'info',
+            'text-yellow-400': log.level === 'warn',
+            'text-red-400': log.level === 'error'
+          }">
+          {{ log.level === 'info' ? 'INF' : log.level === 'warn' ? 'WRN' : 'ERR' }}
+        </span>
+        <!-- 消息内容（自动换行） -->
+        <span class="flex-1 break-all whitespace-pre-wrap"
+          :class="{
+            'text-slate-300': log.level === 'info',
+            'text-yellow-300': log.level === 'warn',
+            'text-red-300': log.level === 'error'
+          }">{{ log.message }}</span>
       </div>
     </div>
   </footer>

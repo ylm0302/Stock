@@ -122,7 +122,6 @@
         reportSections: {},
 
         history: [],
-        logs: [],
 
         chartData: null,
         chartLoading: false,
@@ -130,6 +129,11 @@
 
         // 视图切换
         currentView: 'analysis',        // 'analysis' | 'policy'
+
+        // 日志
+        logs: [],
+        logExpanded: false,
+        logFilter: 'all',           // 'all' | 'info' | 'warn' | 'error'
 
         // 政策推荐
         policyCategories: [],           // 分类列表 [{name, boards: [{name, keywords, funds}]}]
@@ -177,6 +181,11 @@
         if (key.indexOf('•') !== -1) return key;
         if (key.length < 7) return '•••';
         return key.slice(0, 3) + '••••' + key.slice(-4);
+      },
+      filteredLogs: function () {
+        var filter = this.logFilter;
+        if (filter === 'all') return this.logs;
+        return this.logs.filter(function (l) { return l.level === filter; });
       },
     },
 
@@ -403,14 +412,22 @@
       addLog: function (message, level) {
         level = level || 'info';
         this.logs.push({ time: nowTime(), message: String(message), level: level });
-        // Keep max 500 log entries
-        if (this.logs.length > 500) this.logs.splice(0, this.logs.length - 500);
+        // 保留最近 2000 条
+        if (this.logs.length > 2000) this.logs.splice(0, this.logs.length - 2000);
+        // 有错误/警告时自动展开日志区
+        if (level === 'error' || level === 'warn') {
+          this.logExpanded = true;
+        }
         // Auto-scroll on next tick
         var self = this;
         this.$nextTick(function () {
           var el = self.$refs.logContainer;
           if (el) el.scrollTop = el.scrollHeight;
         });
+      },
+
+      clearLogs: function () {
+        this.logs = [];
       },
 
       // ── Agent state ─────────────────────────────────────────────
@@ -861,7 +878,18 @@
                   if (eventName === 'progress') {
                     setStage(data.stage);
                     self.policyProgressMsg = data.message || '';
-                    self.addLog('[热点推荐] ' + data.message, 'info');
+                    // 根据消息内容判断日志级别
+                    var msg = data.message || '';
+                    var lvl = msg.indexOf('❌') !== -1 || msg.indexOf('失败') !== -1 ? 'error'
+                            : msg.indexOf('⚠️') !== -1 || msg.indexOf('警告') !== -1 ? 'warn'
+                            : 'info';
+                    var stageLabels = {
+                      news: '📡 新闻', hotspot: '🧠 热点', expand: '🔍 展开',
+                      score: '📊 评分', rank: '🏆 排序', debate: '⚖️ 辩论',
+                      report: '📝 报告', deep: '🔬 深度'
+                    };
+                    var stageTag = stageLabels[data.stage] || data.stage;
+                    self.addLog('[' + stageTag + '] ' + msg, lvl);
                   } else if (eventName === 'done') {
                     // 全部步骤 done
                     self.policySteps.forEach(function (s) { s.done = true; s.active = false; });
