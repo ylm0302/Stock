@@ -923,13 +923,16 @@ class FrontendHandler(SimpleHTTPRequestHandler):
         config["output_language"] = "Chinese"
         config["llm_provider"] = llm_provider.lower()
         if shallow_thinker:
-            config["quick_think_llm"] = shallow_thinker
+            config["quick_think_llm"] = shallow_thinker   # 快速思考模型
         if deep_thinker:
-            config["deep_think_llm"] = deep_thinker
+            config["deep_think_llm"] = deep_thinker       # 深度思考模型
         if backend_url:
             config["backend_url"] = backend_url
         if max_price:
             config["policy_max_price"] = max_price
+        # api_key 已写入环境变量，此处再存一份便于 build_llm 检测
+        if api_key:
+            config["_api_key"] = api_key
 
         # 建立 SSE 响应
         self.send_response(200)
@@ -954,7 +957,15 @@ class FrontendHandler(SimpleHTTPRequestHandler):
         try:
             from tradingagents.policy_screener.runner import PolicyScreenerRunner, build_llm
 
-            llm = build_llm(config)
+            # ── 构建 LLM，失败立即推送错误原因 ──
+            try:
+                llm = build_llm(config)
+                _sse("progress", {"stage": "hotspot", "message": f"LLM 初始化成功（{llm_provider}/{config.get('quick_think_llm','')}）"})
+            except RuntimeError as llm_err:
+                _sse("progress", {"stage": "hotspot", "message": f"❌ LLM 初始化失败：{llm_err}"})
+                _sse("error", {"message": str(llm_err)})
+                return
+
             graph = None
             if deep and llm is not None:
                 from tradingagents.graph.trading_graph import TradingAgentsGraph

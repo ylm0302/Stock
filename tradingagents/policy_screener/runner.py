@@ -23,15 +23,34 @@ logger = logging.getLogger(__name__)
 
 
 def build_llm(config: dict):
-    """按 config 构造 LLM；失败返回 None。"""
+    """按 config 构造 LLM；失败时抛出 RuntimeError 说明原因。"""
+    from tradingagents.llm_clients.factory import create_llm_client
+    provider = config.get("llm_provider", "")
+    model    = config.get("quick_think_llm", "")
+
+    if not provider:
+        raise RuntimeError("llm_provider 未设置，请在左侧选择 LLM 提供商")
+    if not model:
+        raise RuntimeError(f"快速思考模型名称为空（provider={provider}），请检查配置")
+
+    # 检查 API Key 环境变量是否已设置
+    from tradingagents.llm_clients.api_key_env import PROVIDER_API_KEY_ENV
+    import os
+    env_var = PROVIDER_API_KEY_ENV.get(provider.lower())
+    if env_var:
+        key_in_env = os.environ.get(env_var, "")
+        key_in_cfg = config.get("_api_key", "")
+        if not key_in_env and not key_in_cfg:
+            raise RuntimeError(
+                f"API Key 未设置：{env_var} 为空。"
+                f"请在左侧面板填写 {provider} 的 API Key 后重试。"
+            )
+
     try:
-        from tradingagents.llm_clients.factory import create_llm_client
-        provider = config["llm_provider"]
-        model = config["quick_think_llm"]
         client = create_llm_client(provider, model, config.get("backend_url"))
         return client.get_llm()
-    except Exception:
-        return None
+    except Exception as e:
+        raise RuntimeError(f"LLM 客户端创建失败（{provider}/{model}）：{e}") from e
 
 
 class PolicyScreenerRunner:
