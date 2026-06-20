@@ -1,17 +1,79 @@
 #!/usr/bin/env python3
+# 强制在任何 import 之前设置 UTF-8 编码，避免中文日志触发 ascii 编码错误
+import os
+import sys
+
+# 设置环境变量，影响子进程和部分库的编码行为
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+os.environ.setdefault("PYTHONUTF8", "1")
+
+# 强制 stdout/stderr 使用 UTF-8（Python 3.7+ 支持）
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 import argparse
 import json
 import logging
-import os
 import queue
 import re
-import sys
 import threading
 import time
 import uuid
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+
+
+# ── 在所有业务 import 之前安装 UTF-8 安全 logging handler ────────────
+def _install_safe_logging():
+    """安装自定义 SafeStreamHandler，写入前强制 UTF-8 编码。
+
+    必须在任何业务模块 import 前调用，否则其他模块触发的 basicConfig 可能
+    先注册了 ascii StreamHandler，导致中文日志报 UnicodeEncodeError。
+    """
+    class SafeStreamHandler(logging.StreamHandler):
+        def emit(self, record):
+            try:
+                msg = self.format(record)
+                if hasattr(self.stream, "buffer"):
+                    self.stream.buffer.write(
+                        (msg + self.terminator).encode("utf-8", errors="replace")
+                    )
+                    self.stream.buffer.flush()
+                else:
+                    self.stream.write(
+                        msg.encode("utf-8", errors="replace").decode("utf-8")
+                        + self.terminator
+                    )
+                    self.flush()
+            except RecursionError:
+                raise
+            except Exception:
+                self.handleError(record)
+
+    root = logging.getLogger()
+    # 清除旧 handlers
+    for h in list(root.handlers):
+        root.removeHandler(h)
+        h.close()
+    h = SafeStreamHandler(sys.stderr)
+    h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s", datefmt="%H:%M:%S"))
+    root.addHandler(h)
+    root.setLevel(logging.INFO)
+
+    # 捕获 warnings 模块的输出到 logging 系统，避免 ASCII stderr 编码错误
+    # 这样 warnings.warn() 会经过上面的 SafeStreamHandler，确保 UTF-8 编码
+    logging.captureWarnings(True)
+
+_install_safe_logging()
 
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -1095,44 +1157,46 @@ class FrontendHandler(SimpleHTTPRequestHandler):
 
 def _setup_logging():
     """配置 logging 使用 UTF-8 编码，避免中文日志在某些终端引发 ascii 编码错误。"""
-    # 强制 stdout/stderr 使用 UTF-8
-    if hasattr(sys.stdout, "reconfigure"):
-        try:
-            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
-    if hasattr(sys.stderr, "reconfigure"):
-        try:
-            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
+    import io
 
-    # 配置根 logger：StreamHandler 显式指定 UTF-8
+    class SafeStreamHandler(logging.StreamHandler):
+        """StreamHandler 的子类，写入时强制 UTF-8 并用 replace 处理无法编码的字符。"""
+
+        def emit(self, record):
+            try:
+                msg = self.format(record)
+                stream = self.stream
+                # 确保写入时不会因编码问题崩溃
+                if hasattr(stream, "buffer"):
+                    stream.buffer.write((msg + self.terminator).encode("utf-8", errors="replace"))
+                    stream.buffer.flush()
+                else:
+                    # fallback：先把 msg 安全编码再解码成 ascii 兼容字符串
+                    safe_msg = msg.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
+                    stream.write(safe_msg + self.terminator)
+                    self.flush()
+            except RecursionError:
+                raise
+            except Exception:
+                self.handleError(record)
+
+    # 移除根 logger 上已有的所有 StreamHandler，换成 SafeStreamHandler
     root = logging.getLogger()
-    if not root.handlers:
-        handler = logging.StreamHandler(sys.stderr)
-        handler.setFormatter(logging.Formatter(
-            "%(asctime)s %(levelname)s %(message)s",
-            datefmt="%H:%M:%S",
-        ))
-        root.addHandler(handler)
-    else:
-        for h in root.handlers:
-            if isinstance(h, logging.StreamHandler):
-                # 替换 stream 为带 UTF-8 的版本（兼容 Python 3.9+）
-                try:
-                    import io
-                    if hasattr(h.stream, "buffer"):
-                        h.stream = io.TextIOWrapper(
-                            h.stream.buffer,
-                            encoding="utf-8",
-                            errors="replace",
-                            line_buffering=True,
-                        )
-                except Exception:
-                    pass
+    for h in list(root.handlers):
+        if isinstance(h, logging.StreamHandler):
+            root.removeHandler(h)
+            h.close()
 
+    handler = SafeStreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s %(levelname)s %(message)s",
+        datefmt="%H:%M:%S",
+    ))
+    root.addHandler(handler)
     root.setLevel(logging.INFO)
+
+    # 捕获 warnings 模块的输出到 logging 系统，避免 ASCII stderr 编码错误
+    logging.captureWarnings(True)
 
 
 def main():
