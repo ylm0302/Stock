@@ -42,7 +42,7 @@ def fetch_cn_hotspot_news(limit: int = 30) -> Tuple[str, str]:
                 logger.info("东财快讯获取成功，共 %d 条", len(items))
                 return text, f"东财7×24快讯（{len(items)}条）"
     except Exception as e:
-        logger.warning("东财快讯失败: %s", e)
+        logger.warning("东财快讯失败: %s", str(e))
 
     # ── 2) 财新宏观新闻 ───────────────────────────────────────────
     try:
@@ -56,7 +56,7 @@ def fetch_cn_hotspot_news(limit: int = 30) -> Tuple[str, str]:
                 logger.info("财新宏观新闻获取成功，共 %d 条", len(items))
                 return text, f"财新宏观（{len(items)}条）"
     except Exception as e:
-        logger.warning("财新宏观新闻失败: %s", e)
+        logger.warning("财新宏观新闻失败: %s", str(e))
 
     # ── 3) 东财个股新闻（用上证指数作为宏观代理）────────────────────
     try:
@@ -70,7 +70,7 @@ def fetch_cn_hotspot_news(limit: int = 30) -> Tuple[str, str]:
                 logger.info("东财市场新闻获取成功，共 %d 条", len(items))
                 return text, f"东财市场新闻（{len(items)}条）"
     except Exception as e:
-        logger.warning("东财市场新闻失败: %s", e)
+        logger.warning("东财市场新闻失败: %s", str(e))
 
     # ── 全部失败 ──────────────────────────────────────────────────
     logger.error("所有新闻源均不可用，无法获取实时财经新闻")
@@ -149,7 +149,7 @@ def extract_hotspots_with_llm(
         return [], msg
     except Exception as e:
         msg = f"LLM 调用失败：{e}"
-        logger.error(msg)
+        logger.error("LLM 调用失败: %s", str(e))
         return [], msg
 
 

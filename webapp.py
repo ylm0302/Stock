@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import logging
 import os
 import queue
 import re
+import sys
 import threading
 import time
 import uuid
@@ -671,41 +673,127 @@ class FrontendHandler(SimpleHTTPRequestHandler):
     # ── Chart data ───────────────────────────────────────────────────────
 
     def handle_chart_data(self, ticker: str):
-        """Return OHLCV + technical indicators for ECharts candlestick chart."""
-        import yfinance as yf
+        """Return OHLCV + technical indicators for ECharts candlestick chart.
+
+        先尝试 yfinance，若限速则自动降级到 baostock（仅限 A 股）。
+        """
+        ticker_clean = ticker.strip().upper()
+
+        # ── 尝试 yfinance ──────────────────────────────────────────────
+        yf_error = None
         try:
-            stock = yf.Ticker(ticker.strip().upper())
+            import yfinance as yf
+            stock = yf.Ticker(ticker_clean)
             hist = stock.history(period="6mo")
-            if hist.empty:
-                self.send_error(404, f"No price data for {ticker}")
+            if not hist.empty:
+                ohlc, volumes = self._build_chart_arrays(hist)
+                self.send_json({
+                    "ticker": ticker_clean,
+                    "ohlc": ohlc,
+                    "volumes": volumes,
+                    "period": "6mo",
+                    "source": "yfinance",
+                })
+                return
+            # hist 为空可能是限速或无数据
+            yf_error = "yfinance 返回空数据"
+        except Exception as exc:
+            yf_error = str(exc)
+            logging.warning("[图表] yfinance 失败: %s，尝试 baostock 降级", yf_error)
+
+        # ── 降级到 baostock（仅 A 股） ─────────────────────────────────
+        is_a_share = (
+            ticker_clean.endswith(".SS") or
+            ticker_clean.endswith(".SZ") or
+            (ticker_clean.isdigit() and len(ticker_clean) == 6)
+        )
+        if is_a_share:
+            try:
+                ohlc, volumes = self._get_chart_data_baostock(ticker_clean)
+                if ohlc:
+                    self.send_json({
+                        "ticker": ticker_clean,
+                        "ohlc": ohlc,
+                        "volumes": volumes,
+                        "period": "6mo",
+                        "source": "baostock",
+                    })
+                    logging.info("[图表] %s 已通过 baostock 降级获取数据（%d 条）", ticker_clean, len(ohlc))
+                    return
+            except Exception as bs_exc:
+                logging.warning("[图表] baostock 降级也失败: %s", bs_exc)
+                self.send_error(500, f"Chart data error: yfinance({yf_error}), baostock({bs_exc})")
                 return
 
-            # Format as ECharts-compatible arrays: [date, open, close, low, high]
-            ohlc = []
-            volumes = []
-            for idx, row in hist.iterrows():
-                date_str = idx.strftime("%Y-%m-%d")
-                ohlc.append([
-                    date_str,
-                    round(float(row["Open"]), 2),
-                    round(float(row["Close"]), 2),
-                    round(float(row["Low"]), 2),
-                    round(float(row["High"]), 2),
-                ])
-                volumes.append([
-                    date_str,
-                    round(float(row["Volume"]), 0),
-                    1 if row["Close"] >= row["Open"] else -1,
-                ])
+        self.send_error(500, f"Chart data error: {yf_error}")
 
-            self.send_json({
-                "ticker": ticker.upper(),
-                "ohlc": ohlc,
-                "volumes": volumes,
-                "period": "6mo",
-            })
-        except Exception as exc:
-            self.send_error(500, f"Chart data error: {exc}")
+    def _build_chart_arrays(self, hist):
+        """将 yfinance DataFrame 转换为 ECharts 格式数组。"""
+        ohlc = []
+        volumes = []
+        for idx, row in hist.iterrows():
+            date_str = idx.strftime("%Y-%m-%d")
+            ohlc.append([
+                date_str,
+                round(float(row["Open"]), 2),
+                round(float(row["Close"]), 2),
+                round(float(row["Low"]), 2),
+                round(float(row["High"]), 2),
+            ])
+            volumes.append([
+                date_str,
+                round(float(row["Volume"]), 0),
+                1 if row["Close"] >= row["Open"] else -1,
+            ])
+        return ohlc, volumes
+
+    def _get_chart_data_baostock(self, ticker: str):
+        """用 baostock 获取 K 线数据，返回 (ohlc, volumes) 元组。"""
+        from datetime import datetime, timedelta
+        from tradingagents.dataflows.baostock_data import _to_bs_code, _ensure_login
+
+        bs_code = _to_bs_code(ticker)
+        if bs_code is None:
+            raise ValueError(f"baostock 不支持 ticker: {ticker}")
+
+        if not _ensure_login():
+            raise RuntimeError("baostock 登录失败")
+
+        import baostock as bs
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=180)).strftime("%Y-%m-%d")
+
+        rs = bs.query_history_k_data_plus(
+            bs_code,
+            "date,open,high,low,close,volume",
+            start_date=start_date,
+            end_date=end_date,
+            frequency="d",
+            adjustflag="2",  # 前复权
+        )
+        if rs.error_code != "0":
+            raise RuntimeError(f"baostock 查询失败: {rs.error_msg}")
+
+        ohlc = []
+        volumes = []
+        while rs.next():
+            row = rs.get_row_data()
+            # row: [date, open, high, low, close, volume]
+            try:
+                date_str = row[0]
+                o = round(float(row[1] or 0), 2)
+                h = round(float(row[2] or 0), 2)
+                lo = round(float(row[3] or 0), 2)
+                c = round(float(row[4] or 0), 2)
+                v = round(float(row[5] or 0), 0)
+                if o == 0 and c == 0:
+                    continue
+                ohlc.append([date_str, o, c, lo, h])
+                volumes.append([date_str, v, 1 if c >= o else -1])
+            except (ValueError, IndexError):
+                continue
+
+        return ohlc, volumes
 
     # ── POST /api/profiles ─────────────────────────────────────────────
 
@@ -1005,7 +1093,50 @@ class FrontendHandler(SimpleHTTPRequestHandler):
         pass
 
 
+def _setup_logging():
+    """配置 logging 使用 UTF-8 编码，避免中文日志在某些终端引发 ascii 编码错误。"""
+    # 强制 stdout/stderr 使用 UTF-8
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+    if hasattr(sys.stderr, "reconfigure"):
+        try:
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+    # 配置根 logger：StreamHandler 显式指定 UTF-8
+    root = logging.getLogger()
+    if not root.handlers:
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)s %(message)s",
+            datefmt="%H:%M:%S",
+        ))
+        root.addHandler(handler)
+    else:
+        for h in root.handlers:
+            if isinstance(h, logging.StreamHandler):
+                # 替换 stream 为带 UTF-8 的版本（兼容 Python 3.9+）
+                try:
+                    import io
+                    if hasattr(h.stream, "buffer"):
+                        h.stream = io.TextIOWrapper(
+                            h.stream.buffer,
+                            encoding="utf-8",
+                            errors="replace",
+                            line_buffering=True,
+                        )
+                except Exception:
+                    pass
+
+    root.setLevel(logging.INFO)
+
+
 def main():
+    _setup_logging()
     args = parse_args()
     global RESULTS_DIR
     RESULTS_DIR = Path(args.results_dir).expanduser().resolve()

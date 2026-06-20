@@ -87,7 +87,9 @@ def qualify(candidate: Candidate, llm) -> Tuple[int, str]:
         content = getattr(resp, "content", str(resp))
         return parse_llm_score(str(content))
     except Exception as e:
-        logger.debug("qualify %s 失败: %s", candidate.ticker, e)
+        # 避免 ascii 编码问题，使用 repr 转换异常消息
+        err_repr = repr(e)
+        logger.debug("qualify %s 失败: %s", candidate.ticker, str(e))
         return 50, "LLM 调用失败，采用中性分"
 
 
@@ -147,7 +149,9 @@ def debate_and_verdict(
             stars   = max(1, min(5, stars))
             return bull, bear, verdict, stars
     except Exception as e:
-        logger.warning("debate_and_verdict %s 失败: %s", scored.ticker, e)
+        # 避免 ascii 编码问题，使用 repr 转换异常消息
+        err_repr = repr(e)
+        logger.warning("debate_and_verdict %s 失败: %s", scored.ticker, str(e))
 
     return _fallback_debate(scored)
 
