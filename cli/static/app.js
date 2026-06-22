@@ -1007,7 +1007,7 @@
           backend_url: self.activeProfileConfig.backend_url || '',
           shallow_thinker: (self.activeProfileConfig.shallow_thinker || '').trim(),
           deep_thinker: (self.activeProfileConfig.deep_thinker || '').trim(),
-          api_key: self.activeProfileConfig.api_key || '',
+          api_key: self.form.api_key || '',
         };
 
         fetch('/api/policy-recommend', {
@@ -1060,7 +1060,7 @@
           backend_url: self.activeProfileConfig.backend_url || '',
           shallow_thinker: (self.activeProfileConfig.shallow_thinker || '').trim(),
           deep_thinker: (self.activeProfileConfig.deep_thinker || '').trim(),
-          api_key: self.activeProfileConfig.api_key || '',
+          api_key: self.form.api_key || '',
         };
 
         // 用 fetch + ReadableStream 处理 SSE（fetch POST SSE）

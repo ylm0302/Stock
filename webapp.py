@@ -162,6 +162,35 @@ def mask_api_key(key) -> str:
     return f"{key[:3]}{'•' * 4}{key[-4:]}"
 
 
+def is_masked_key(key) -> bool:
+    """检测 api_key 是否已被脱敏（含 • 字符），避免误用脱敏密钥。"""
+    if not key:
+        return False
+    return "•" in str(key) or "●" in str(key) or "＊" in str(key)
+
+
+def resolve_api_key(key_from_request: str) -> str:
+    """智能解析 API Key.
+
+    优先级：
+    1. 请求中的明文密钥（不含脱敏字符）→ 直接使用
+    2. 请求中为空或被脱敏 → 从激活的 profile 中读取真实密钥
+    """
+    if key_from_request and not is_masked_key(key_from_request):
+        return key_from_request
+
+    # 从激活的 profile 中读取真实密钥
+    data = load_profiles()
+    active_name = data.get("active")
+    if active_name:
+        profile = find_profile(data, active_name)
+        if profile:
+            key = profile.get("config", {}).get("api_key", "")
+            if key and not is_masked_key(key):
+                return key
+    return ""
+
+
 def load_profiles() -> dict:
     """Read profiles.json. Returns empty structure if file missing or corrupted."""
     if not PROFILES_PATH.is_file():
@@ -1029,6 +1058,9 @@ class FrontendHandler(SimpleHTTPRequestHandler):
         api_key = payload.get("api_key") or ""
         backend_url = payload.get("backend_url") or ""
 
+        # 如果前端传了脱敏密钥或空密钥，从激活的 profile 中读取真实密钥
+        api_key = resolve_api_key(api_key)
+
         # Parse themes (comma-separated)
         themes_list = [t.strip() for t in themes_str.split(",") if t.strip()]
 
@@ -1101,6 +1133,10 @@ class FrontendHandler(SimpleHTTPRequestHandler):
         deep_thinker   = payload.get("deep_thinker") or ""
         api_key        = payload.get("api_key") or ""
         backend_url    = payload.get("backend_url") or ""
+
+        # 智能解析：如果前端传了脱敏/空密钥，从存储的 profile 读取真实密钥
+        api_key = resolve_api_key(api_key)
+
         max_price_raw  = payload.get("max_price")
         max_price      = float(max_price_raw) if max_price_raw else None
 
