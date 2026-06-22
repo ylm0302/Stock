@@ -178,14 +178,40 @@ class PolicyScreenerRunner:
             # 统计实际新闻条数（以"- "开头的行）
             news_count = sum(1 for line in news_text.splitlines() if line.startswith("- "))
             emit("news", f"新闻获取成功：{news_source}，有效条目 {news_count} 条")
+
+            # 输出新闻详情（前10条，避免日志过长）
+            news_lines = [line for line in news_text.splitlines() if line.startswith("- ")]
+            for i, line in enumerate(news_lines[:10], 1):
+                emit("news", f"  [{i}] {line[2:]}")  # 去掉前面的 "- "
+            if news_count > 10:
+                emit("news", f"  ... 还有 {news_count - 10} 条新闻")
         else:
             emit("news", f"⚠️ {news_source}")
 
         # ── Step 2: LLM 分析热点 → 提取主题 ─────────────────────
         emit("hotspot", "LLM 正在分析热点主题，结合国家政策筛选板块…")
+
+        # 输出 LLM 配置信息
+        llm_provider = cfg.get("llm_provider", "unknown")
+        llm_model = cfg.get("quick_think_llm", "unknown")
+        emit("hotspot", f"📋 LLM 配置: {llm_provider}/{llm_model}")
+
+        # 检查 API Key 状态
+        from tradingagents.llm_clients.api_key_env import PROVIDER_API_KEY_ENV
+        import os
+        env_var = PROVIDER_API_KEY_ENV.get(llm_provider.lower())
+        if env_var:
+            api_key = os.environ.get(env_var, "")
+            if api_key:
+                # 不显示具体密钥内容，避免编码问题
+                emit("hotspot", f"🔑 API Key: {env_var} 已设置")
+            else:
+                emit("hotspot", f"❌ API Key: {env_var} 未设置！")
+
         all_theme_cfg = load_themes(cfg["policy_themes_file"], enabled=[])
         all_board_names = all_theme_cfg.enabled_board_names()
         emit("hotspot", f"板块库共 {len(all_board_names)} 个板块可供匹配")
+        emit("hotspot", f"📊 板块列表（前10个）: {', '.join(all_board_names[:10])}")
 
         hotspots, hotspot_msg = extract_hotspots_with_llm(news_text, self.llm, all_board_names)
         emit("hotspot", hotspot_msg)

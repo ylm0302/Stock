@@ -10,6 +10,24 @@ from .capabilities import get_capabilities
 from .validators import validate_model
 
 
+def _create_utf8_http_client():
+    """Create an HTTP client with UTF-8 encoding support."""
+    try:
+        import httpx
+        import logging
+        # Completely disable httpx and openai logging to avoid encoding issues
+        for logger_name in ["httpx", "httpcore", "openai", "langchain_openai"]:
+            logger = logging.getLogger(logger_name)
+            logger.setLevel(logging.CRITICAL)
+            logger.propagate = False
+        return httpx.Client(
+            timeout=60.0,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+        )
+    except ImportError:
+        return None
+
+
 class NormalizedChatOpenAI(ChatOpenAI):
     """ChatOpenAI with normalized content output and capability-aware binding.
 
@@ -226,6 +244,12 @@ class OpenAIClient(BaseLLMClient):
         for key in _PASSTHROUGH_KWARGS:
             if key in self.kwargs:
                 llm_kwargs[key] = self.kwargs[key]
+
+        # Add UTF-8 HTTP client if not already provided
+        if "http_client" not in llm_kwargs and "http_async_client" not in llm_kwargs:
+            http_client = _create_utf8_http_client()
+            if http_client:
+                llm_kwargs["http_client"] = http_client
 
         # Native OpenAI: use Responses API for consistent behavior across
         # all model families. Third-party providers use Chat Completions.

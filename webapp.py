@@ -7,6 +7,20 @@ import sys
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 os.environ.setdefault("PYTHONUTF8", "1")
 
+# 强制设置 UTF-8 locale，防止 HTTP 客户端库（httpx/requests）使用 ASCII
+# 这是根本性修复：许多底层库会从 locale 读取默认编码
+import locale
+try:
+    # 尝试常见的 UTF-8 locale（按优先级排序）
+    for loc in ['en_US.UTF-8', 'C.UTF-8', 'zh_CN.UTF-8', 'en_GB.UTF-8']:
+        try:
+            locale.setlocale(locale.LC_ALL, loc)
+            break
+        except locale.Error:
+            continue
+except Exception:
+    pass  # locale 设置失败不影响启动，后续有其他防护
+
 # 强制 stdout/stderr 使用 UTF-8（Python 3.7+ 支持）
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -18,6 +32,27 @@ if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
+
+# 如果 reconfigure 不生效或不支持，直接替换为 UTF-8 文本包装器
+import io
+if not hasattr(sys.stdout, 'reconfigure') or sys.stdout.encoding.lower() != 'utf-8':
+    if hasattr(sys.stdout, 'buffer'):
+        sys.stdout = io.TextIOWrapper(
+            sys.stdout.buffer,
+            encoding='utf-8',
+            errors='replace',
+            line_buffering=True,
+            write_through=True
+        )
+if not hasattr(sys.stderr, 'reconfigure') or sys.stderr.encoding.lower() != 'utf-8':
+    if hasattr(sys.stderr, 'buffer'):
+        sys.stderr = io.TextIOWrapper(
+            sys.stderr.buffer,
+            encoding='utf-8',
+            errors='replace',
+            line_buffering=True,
+            write_through=True
+        )
 
 import argparse
 import json
@@ -72,6 +107,11 @@ def _install_safe_logging():
     # 捕获 warnings 模块的输出到 logging 系统，避免 ASCII stderr 编码错误
     # 这样 warnings.warn() 会经过上面的 SafeStreamHandler，确保 UTF-8 编码
     logging.captureWarnings(True)
+
+    # 禁用 langchain 的缓存调试输出（可能包含中文并触发 ASCII 编码错误）
+    os.environ.setdefault("LANGCHAIN_CACHE", "")
+    os.environ.setdefault("LANGCHAIN_TRACING", "false")
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "false")
 
 _install_safe_logging()
 
@@ -1197,6 +1237,11 @@ def _setup_logging():
 
     # 捕获 warnings 模块的输出到 logging 系统，避免 ASCII stderr 编码错误
     logging.captureWarnings(True)
+
+    # 禁用 langchain 的缓存调试输出（可能包含中文并触发 ASCII 编码错误）
+    os.environ.setdefault("LANGCHAIN_CACHE", "")
+    os.environ.setdefault("LANGCHAIN_TRACING", "false")
+    os.environ.setdefault("LANGCHAIN_TRACING_V2", "false")
 
 
 def main():
